@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================ Standard cross-cutting models ============================
+// Every iDARMS service carries these four models for reliable messaging and auditability.
+
+model OutboxEvent {
+  id               String    @id @default(uuid()) @db.Uuid
+  eventType        String
+  eventVersion     Int       @default(1)
+  aggregateType    String
+  aggregateId      String
+  aggregateVersion Int
+  routingKey       String
+  payload          Json
+  headers          Json
+  occurredAt       DateTime  @default(now())
+  publishedAt      DateTime?
+  attempts         Int       @default(0)
+  nextAttemptAt    DateTime  @default(now())
+  lockedAt         DateTime?
+  lastError        String?
+
+  @@index([publishedAt, nextAttemptAt, occurredAt])
+  @@map("outbox_events")
+}
+
+model InboxMessage {
+  id          String    @id @default(uuid()) @db.Uuid
+  consumerId  String
+  messageId   String    @db.Uuid
+  eventType   String
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  result      Json?
+
+  @@unique([consumerId, messageId])
+  @@map("inbox_messages")
+}
+
+model AuditRecord {
+  id           String   @id @default(uuid()) @db.Uuid
+  occurredAt   DateTime @default(now())
+  actorId      String
+  actorType    String
+  concessionId String?  @db.Uuid
+  assemblyId   String?  @db.Uuid
+  action       String
+  resourceType String
+  resourceId   String?
+  requestId    String
+  sourceIp     String?
+  outcome      String
+  metadata     Json
+
+  @@index([concessionId, assemblyId, occurredAt])
+  @@map("audit_records")
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  concessionId   String   @db.Uuid
+  idempotencyKey String
+  requestHash    String
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([concessionId, idempotencyKey])
+  @@map("idempotency_records")
+}
+
+// ============================ Domain models ============================
+model SyncRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  entityType     String   // PROPERTY, PAYMENT, RATEPAYER
+  entityId       String   @db.Uuid
+  direction      String   // UPSTREAM, DOWNSTREAM
+  status         String   // SYNCED, FAILED
+  croipReference String?
+  lastSyncedAt   DateTime @default(now())
+
+  @@unique([entityType, entityId, direction])
+  @@map("sync_records")
+}

@@ -1,0 +1,39 @@
+{
+  "name": "@idarms/reconciliation-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "reconciliation-service — iDARMS microservice",
+  "type": "commonjs",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "worker:outbox": "tsx src/workers/outbox-worker.ts",
+    "worker:inbox": "tsx src/workers/inbox-worker.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.1",
+    "@fastify/swagger": "^9.9.2",
+    "@fastify/swagger-ui": "^6.1.2",
+    "@prisma/client": "^6.19.3",
+    "amqplib": "^2.2.0",
+    "dotenv": "^18.0.8",
+    "fastify": "^5.12.7",
+    "jose": "^5.0.0",
+    "pino": "^10.4.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prisma": "^6.19.3",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "idarms-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "iDARMS - decoupled concessionaire microservice ecosystem (local operational backend) with a CROIP sync bridge",
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "prisma:generate": "turbo run prisma:generate",
+    "services:generate": "node scripts/generate-services.mjs",
+    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "db:logs": "docker compose -f infra/docker/docker-compose.yml logs -f"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.9"
+  }
+}

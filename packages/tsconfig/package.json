@@ -1,0 +1,11 @@
+{
+  "name": "@idarms/tsconfig",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared TypeScript base configurations for the iDARMS monorepo",
+  "files": [
+    "base.json",
+    "node.json",
+    "nextjs.json"
+  ]
+}
