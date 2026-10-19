@@ -10,7 +10,7 @@ interface Payment {
 }
 
 export default async function PaymentsPage() {
-  const payload = await idarmsGet<{ data: Payment[] }>('/payments');
+  const payload = await idarmsGet<{ data: Payment[] }>('payments', '/payments');
   const payments = payload?.data ?? [];
 
   return (

@@ -9,7 +9,7 @@ interface Property {
 }
 
 export default async function PropertiesPage() {
-  const payload = await idarmsGet<{ data: Property[] }>('/properties');
+  const payload = await idarmsGet<{ data: Property[] }>('properties', '/properties');
   const properties = payload?.data ?? [];
 
   return (

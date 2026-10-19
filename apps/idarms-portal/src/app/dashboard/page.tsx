@@ -9,7 +9,7 @@ interface DashboardMetric {
 }
 
 export default async function DashboardPage() {
-  const payload = await idarmsGet<{ data: DashboardMetric[] }>('/dashboard/metrics');
+  const payload = await idarmsGet<{ data: DashboardMetric[] }>('dashboard', '/dashboard/metrics');
   const metrics = payload?.data ?? [];
 
   return (

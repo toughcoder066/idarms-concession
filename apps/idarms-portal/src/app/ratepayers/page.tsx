@@ -11,7 +11,7 @@ interface Ratepayer {
 }
 
 export default async function RatepayersPage() {
-  const payload = await idarmsGet<{ data: Ratepayer[] }>('/ratepayers');
+  const payload = await idarmsGet<{ data: Ratepayer[] }>('ratepayers', '/ratepayers');
   const ratepayers = payload?.data ?? [];
 
   return (

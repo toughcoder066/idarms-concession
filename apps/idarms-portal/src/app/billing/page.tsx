@@ -11,7 +11,7 @@ interface Bill {
 }
 
 export default async function BillingPage() {
-  const payload = await idarmsGet<{ data: Bill[] }>('/bills');
+  const payload = await idarmsGet<{ data: Bill[] }>('bills', '/bills');
   const bills = payload?.data ?? [];
 
   return (

@@ -15,3 +15,14 @@ export const byIdParamsSchema = {
     id: { type: 'string' },
   },
 } as const;
+
+export const verifyBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['status'],
+  properties: {
+    status: { type: 'string', enum: ['APPROVED', 'REJECTED'] },
+    notes: { type: 'string' },
+    photoUrl: { type: 'string' },
+  },
+} as const;

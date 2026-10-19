@@ -15,11 +15,13 @@
     "lint": "turbo run lint",
     "prisma:generate": "turbo run prisma:generate",
     "services:generate": "node scripts/generate-services.mjs",
+    "event:publish": "node scripts/dev/publish-event.mjs",
     "db:up": "docker compose -f infra/docker/docker-compose.yml up -d",
     "db:down": "docker compose -f infra/docker/docker-compose.yml down",
     "db:logs": "docker compose -f infra/docker/docker-compose.yml logs -f"
   },
   "devDependencies": {
+    "amqplib": "^2.2.0",
     "turbo": "^2.11.9"
   }
 }
