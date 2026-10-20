@@ -44,9 +44,12 @@ idarms-platform/
 │   └── tsconfig/                   # Shared TypeScript base configs
 ├── infra/docker/
 │   ├── docker-compose.yml          # PostgreSQL (9 DBs) + RabbitMQ
-│   └── postgres-init/              # Creates the 9 isolated databases
+│   ├── postgres-init/              # Creates the 9 isolated databases
+│   └── zitadel/                    # Local ZITADEL identity provider (dev)
 ├── scripts/
 │   ├── generate-services.mjs       # Regenerates services/* from the golden template
+│   ├── dev/                        # start-all, stop-all, smoke-test, publish-event,
+│   │                               # zitadel-bootstrap
 │   └── service-template/           # Golden microservice template
 ├── package.json
 ├── pnpm-workspace.yaml
@@ -139,7 +142,97 @@ pnpm event:publish ratepayer.registered.v1 @payload.json            # idarms.eve
 RABBITMQ_EXCHANGE=croip.events pnpm event:publish croip.ratepayer.registered.v1 @payload.json
 ```
 
-## Development auth
+## Authentication
+
+iDARMS runs two independent authentication realms, exactly as specified in the master spec:
+
+| Realm | Who authenticates | Identity provider | Purpose |
+| --- | --- | --- | --- |
+| Internal iDARMS | Field agents, concession admins, municipal staff using the portal | **iDARMS ZITADEL** (`https://auth.idarms.com`) | Local users, sessions and operational roles |
+| Upward sync to CROIP | The iDARMS backend (machine-to-machine) | **CROIP ZITADEL** (`https://auth.croip.gov.gh`) | Validates M2M credentials (`concession:data-producer`) before accepting upward syncs |
+
+### Local ZITADEL instance (dev)
+
+The repository ships a config-as-code bootstrap for a local ZITADEL that stands in for
+`auth.idarms.com` (and, for M2M, `auth.croip.gov.gh`):
+
+```bash
+pnpm zitadel:up          # start ZITADEL (Traefik + API + Login UI + Postgres)
+pnpm zitadel:bootstrap   # idempotent provisioning of project, apps, roles, users, action
+```
+
+The bootstrap creates:
+
+- Project **iDARMS** with `projectRoleAssertion` enabled (required for role claims).
+- OIDC web app **idarms-portal** (authorization-code + refresh, JWT access tokens,
+  `accessTokenRoleAssertion`, `idTokenRoleAssertion`).
+- API app **idarms-api**.
+- 17 operational roles (`ratepayer:read`, `property:verify`, `bill:generate`, …).
+- Human users `concession-admin` (all roles) and `field-agent` (field roles), password
+  `Password1!`.
+- User metadata `concessionId` / `assemblyId` for each human user.
+- Machine user `croip-m2m` (JWT client-credentials) as the stand-in for the CROIP-issued
+  M2M client.
+- A token action (`idarmsContext`, bound to *Complement Token → Pre Access Token Creation*)
+  that injects the `urn:idarms:context` claim into access tokens.
+
+Admin console: <http://localhost:8080> (`zitadel-admin@zitadel.localhost` / `Password1!`).
+The bootstrap is idempotent and safe to re-run; secrets are printed on first creation only
+(and are stored in `apps/idarms-portal/.env.local`).
+
+### Portal login
+
+The portal uses Auth.js (NextAuth v5) with the Zitadel provider. After `pnpm zitadel:bootstrap`,
+set `apps/idarms-portal/.env.local`:
+
+```bash
+AUTH_SECRET=<openssl rand -base64 32>
+ZITADEL_ISSUER=http://localhost:8080
+ZITADEL_CLIENT_ID=<web app client id>          # printed by bootstrap
+ZITADEL_CLIENT_SECRET=<web app client secret>  # printed by bootstrap
+```
+
+Run `pnpm --filter @idarms/idarms-portal dev` and open <http://localhost:3000>. Sign in with
+`concession-admin` / `Password1!`. The access token carries:
+
+- `urn:zitadel:iam:org:project:roles` — the user's project roles.
+- `urn:idarms:context` — `{ concessionId, assemblyId }` from user metadata.
+
+### Service-side validation
+
+Every service's auth plugin (ZITADEL mode) validates the JWT signature against the ZITADEL
+JWKS, checks `issuer` and `audience`, then extracts roles and the `urn:idarms:context` claim
+into `request.auth`. Endpoints opt in with `requirePermissions([...])`.
+
+Enable it per service in its `.env`:
+
+```bash
+AUTH_MODE=zitadel
+ZITADEL_ISSUER=http://localhost:8080
+ZITADEL_AUDIENCE=<web app client id>   # tokens minted for the portal
+ZITADEL_JWKS_URI=http://localhost:8080/oauth/v2/keys
+```
+
+Health/docs endpoints (`/health/live`, `/health/ready`, `/metrics`, `/docs`) stay public;
+payment-service additionally keeps `POST /v1/payments/webhook` public (gateway callback).
+
+### Upward M2M (CROIP)
+
+The sync bridge authenticates to CROIP with OAuth 2.0 client credentials. In the dev stand-in
+the `croip-m2m` machine user plays the role of the CROIP-issued client:
+
+```bash
+CROIP_ZITADEL_ISSUER=http://localhost:8080
+CROIP_CLIENT_ID=croip-m2m
+CROIP_CLIENT_SECRET=<printed by bootstrap on first run>
+```
+
+The token carries the M2M role (production: `concession:data-producer`) proving the backend is
+authorized to push data for its assigned concession and assembly. See
+`apps/idarms-portal/src/lib/m2m.ts` for the helper and `scripts/dev/zitadel-bootstrap.mjs` for
+the full provisioning source.
+
+### Development auth (no ZITADEL)
 
 Set `AUTH_MODE=disabled` only for local development. The configuration refuses this value when
 `NODE_ENV=production`. In dev mode the context comes from headers:

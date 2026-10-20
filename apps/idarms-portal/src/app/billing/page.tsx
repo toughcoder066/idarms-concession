@@ -16,35 +16,43 @@ export default async function BillingPage() {
 
   return (
     <section>
-      <h1>Billing</h1>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Financial operations</p>
+          <h1>Billing</h1>
+          <p className="muted">Review bills issued for properties in this workspace.</p>
+        </div>
+      </div>
       <div className="panel">
         {bills.length === 0 ? (
           <p className="muted">No bills generated yet.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Bill number</th>
-                <th>Property</th>
-                <th>Year</th>
-                <th>Amount due</th>
-                <th>Amount paid</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bills.map((b) => (
-                <tr key={b.id}>
-                  <td>{b.billNumber}</td>
-                  <td>{b.propertyId}</td>
-                  <td>{b.fiscalYear}</td>
-                  <td>{b.amountDue}</td>
-                  <td>{b.amountPaid}</td>
-                  <td><span className="badge">{b.status}</span></td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Bill number</th>
+                  <th>Property</th>
+                  <th>Year</th>
+                  <th>Amount due</th>
+                  <th>Amount paid</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {bills.map((b) => (
+                  <tr key={b.id}>
+                    <td>{b.billNumber}</td>
+                    <td>{b.propertyId}</td>
+                    <td>{b.fiscalYear}</td>
+                    <td>{b.amountDue}</td>
+                    <td>{b.amountPaid}</td>
+                    <td><span className="badge">{b.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </section>

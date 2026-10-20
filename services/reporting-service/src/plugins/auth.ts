@@ -3,6 +3,20 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config } from '../config';
 import type { AuthContext } from '../types/global';
 
+function parseRoles(payload: Record<string, unknown>): string[] {
+  const roles = new Set<string>();
+  for (const [key, value] of Object.entries(payload)) {
+    if (key.startsWith('urn:zitadel:iam:org:project') && key.endsWith(':roles')) {
+      if (value && typeof value === 'object') {
+        for (const role of Object.keys(value as Record<string, unknown>)) {
+          roles.add(role);
+        }
+      }
+    }
+  }
+  return [...roles];
+}
+
 function parsePermissions(value: unknown): string[] {
   if (typeof value === 'string') {
     return value.split(',').map((item) => item.trim()).filter(Boolean);
@@ -22,6 +36,13 @@ function extractBearer(request: FastifyRequest): string | null {
   const [scheme, token] = header.split(' ');
   if (scheme?.toLowerCase() !== 'bearer' || !token) return null;
   return token;
+}
+
+const PUBLIC_PATHS = ['/health/live', '/health/ready', '/metrics', '/docs'];
+
+function isPublicPath(url: string): boolean {
+  const path = url.split('?')[0];
+  return PUBLIC_PATHS.some((publicPath) => path === publicPath || path.startsWith(`${publicPath}/`));
 }
 
 export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
@@ -51,6 +72,9 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
     const jwks = createRemoteJWKSet(new URL(config.zitadelJwksUri));
 
     app.addHook('onRequest', async (request, reply) => {
+      if (isPublicPath(request.url)) {
+        return;
+      }
       const token = extractBearer(request);
       if (!token) {
         return reply.code(401).send({ error: 'unauthorized', message: 'Missing bearer token' });
@@ -67,10 +91,12 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
           assemblyId?: string;
         };
 
+        const roles = parseRoles(payload);
+        const permissions = parsePermissions(payload['urn:idarms:permissions']);
         request.auth = {
           subject: typeof payload.sub === 'string' ? payload.sub : '',
-          roles: parsePermissions(payload['urn:zitadel:iam:org:project:roles']),
-          permissions: parsePermissions(payload['urn:idarms:permissions']),
+          roles,
+          permissions: permissions.length > 0 ? permissions : roles,
           concessionId: context.concessionId,
           assemblyId: context.assemblyId,
         };

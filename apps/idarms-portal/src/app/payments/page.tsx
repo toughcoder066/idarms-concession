@@ -15,33 +15,41 @@ export default async function PaymentsPage() {
 
   return (
     <section>
-      <h1>Payments</h1>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Financial operations</p>
+          <h1>Payments</h1>
+          <p className="muted">Review payment activity and its current status.</p>
+        </div>
+      </div>
       <div className="panel">
         {payments.length === 0 ? (
           <p className="muted">No payments recorded yet.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Bill</th>
-                <th>Amount</th>
-                <th>Channel</th>
-                <th>Gateway ref</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.billId}</td>
-                  <td>{p.amount}</td>
-                  <td>{p.channel}</td>
-                  <td>{p.gatewayRef}</td>
-                  <td><span className="badge">{p.status}</span></td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Bill</th>
+                  <th>Amount</th>
+                  <th>Channel</th>
+                  <th>Gateway ref</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {payments.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.billId}</td>
+                    <td>{p.amount}</td>
+                    <td>{p.channel}</td>
+                    <td>{p.gatewayRef}</td>
+                    <td><span className="badge">{p.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </section>

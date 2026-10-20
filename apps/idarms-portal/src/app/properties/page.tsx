@@ -14,31 +14,39 @@ export default async function PropertiesPage() {
 
   return (
     <section>
-      <h1>Properties</h1>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Property operations</p>
+          <h1>Properties</h1>
+          <p className="muted">Browse the local property register and verification status.</p>
+        </div>
+      </div>
       <div className="panel">
         {properties.length === 0 ? (
           <p className="muted">No properties synced yet.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Ratepayer</th>
-                <th>Type</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {properties.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.reference}</td>
-                  <td>{p.ratepayerId}</td>
-                  <td>{p.propertyType}</td>
-                  <td><span className="badge">{p.status}</span></td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Reference</th>
+                  <th>Ratepayer</th>
+                  <th>Type</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {properties.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.reference}</td>
+                    <td>{p.ratepayerId}</td>
+                    <td>{p.propertyType}</td>
+                    <td><span className="badge">{p.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </section>
