@@ -53,9 +53,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send({ error: 'conflict', message: 'Idempotency key reused with a different request' });
     }
     if (result.status === 'replayed') {
-      return reply.code(201).send(result.responseBody);
+      return reply.code(201).send(result.response);
     }
-    return reply.code(201).send(result.payment);
+    return reply.code(201).send(result.response);
   });
 
   app.post('/v1/payments/webhook', {

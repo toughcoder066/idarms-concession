@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { Payment, PrismaClient } from '../../../generated/prisma';
+import type { Payment, Prisma, PrismaClient } from '../../../generated/prisma';
 import { appendOutboxEvent } from '../../messaging/outbox';
 import { buildEnvelope } from '../../messaging/events';
 
@@ -33,9 +33,39 @@ export interface CheckoutContext {
 }
 
 export type CheckoutResult =
-  | { status: 'created'; payment: Payment }
-  | { status: 'replayed'; responseBody: unknown }
+  | { status: 'created'; response: CheckoutResponse }
+  | { status: 'replayed'; response: unknown }
   | { status: 'conflict' };
+
+export interface CheckoutResponse {
+  id: string;
+  concessionId: string;
+  assemblyId: string;
+  billId: string;
+  amount: number;
+  channel: string;
+  gatewayRef: string;
+  status: string;
+  createdAt: string;
+}
+
+/**
+ * Single response shape used for both the first call and any idempotent replay,
+ * so a retried client sees an identical payload.
+ */
+function toCheckoutResponse(payment: Payment): CheckoutResponse {
+  return {
+    id: payment.id,
+    concessionId: payment.concessionId,
+    assemblyId: payment.assemblyId,
+    billId: payment.billId,
+    amount: Number(payment.amount),
+    channel: payment.channel,
+    gatewayRef: payment.gatewayRef,
+    status: payment.status,
+    createdAt: payment.createdAt.toISOString(),
+  };
+}
 
 /**
  * Idempotent checkout initiation. An Idempotency-Key must be supplied so that a
@@ -57,7 +87,7 @@ export async function checkout(
     if (existing.requestHash !== requestHash) {
       return { status: 'conflict' };
     }
-    return { status: 'replayed', responseBody: existing.responseBody };
+    return { status: 'replayed', response: existing.responseBody };
   }
 
   const payment = await prisma.$transaction(async (tx) => {
@@ -73,11 +103,7 @@ export async function checkout(
       },
     });
 
-    const responseBody = {
-      paymentId: created.id,
-      gatewayRef: created.gatewayRef,
-      status: created.status,
-    };
+    const response = toCheckoutResponse(created);
 
     await tx.idempotencyRecord.create({
       data: {
@@ -85,7 +111,7 @@ export async function checkout(
         idempotencyKey,
         requestHash,
         responseStatus: 201,
-        responseBody,
+        responseBody: response as unknown as Prisma.InputJsonValue,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
     });
@@ -93,7 +119,7 @@ export async function checkout(
     return created;
   });
 
-  return { status: 'created', payment };
+  return { status: 'created', response: toCheckoutResponse(payment) };
 }
 
 export interface WebhookInput {

@@ -69,6 +69,22 @@ pnpm typecheck          # type-check the whole workspace
 pnpm build              # build all packages, services and the portal
 ```
 
+### Run and test everything
+
+```bash
+pnpm dev:all            # infra + 9 services + 17 workers + portal
+pnpm smoke              # end-to-end check of every flow
+pnpm dev:stop           # stop all app processes (containers keep running)
+```
+
+`pnpm dev:all` starts every process in the background and writes logs to `.dev-logs/`.
+`pnpm smoke` publishes a CROIP registration event, follows it through the bridge,
+verification, valuation, billing, payment, reconciliation, reporting and upstream sync,
+and prints PASS/FAIL per step.
+
+Open the portal at <http://localhost:3000> — dashboard, ratepayers, properties, billing
+and payments pages read live from the services.
+
 Local dev infrastructure (see `infra/docker/docker-compose.yml`):
 
 - PostgreSQL: `127.0.0.1:5433` (one isolated database per service; a host Postgres on
