@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { idarmsGet } from '@/lib/api';
 
 interface Property {
@@ -20,6 +21,7 @@ export default async function PropertiesPage() {
           <h1>Properties</h1>
           <p className="muted">Browse the local property register and verification status.</p>
         </div>
+        <Link href="/properties/new" className="button">Register property</Link>
       </div>
       <div className="panel">
         {properties.length === 0 ? (

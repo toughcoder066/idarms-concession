@@ -20,8 +20,11 @@ baseline is documented in [docs/golden_template.md](docs/golden_template.md).
   Transactional Outbox + Inbox patterns.
 - **Multi-assembly tenancy** — every domain table carries `concessionId` and `assemblyId`
   extracted from the `urn:idarms:context` ZITADEL JWT claim.
-- **CQRS routing** — the Next.js frontend performs *writes* directly against the CROIP Apex
-  API, and *reads / local operations* against the local iDARMS services.
+- **CQRS routing** — the Next.js frontend performs *master-data writes* (ratepayers and
+  properties only) directly against the CROIP Apex API, because CROIP's registries are the
+  single source of truth for those entities. *Reads / local operations* hit the local iDARMS
+  services, and every other local operational event flows up to CROIP via the outbox →
+  RabbitMQ bridge for oversight.
 
 ## Repository layout
 

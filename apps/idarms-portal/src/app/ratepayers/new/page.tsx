@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { registerRatepayer } from '@/lib/croip';
+import { submitRatepayer } from './actions';
 
 const emptyForm = {
   reference: '',
@@ -27,7 +27,7 @@ export default function NewRatepayerPage() {
     setSubmitting(true);
     setResult(null);
 
-    const res = await registerRatepayer({
+    const res = await submitRatepayer({
       reference: form.reference,
       fullName: form.fullName,
       ghanaCardId: form.ghanaCardId || undefined,

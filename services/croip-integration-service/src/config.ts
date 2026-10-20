@@ -53,8 +53,10 @@ export const config = {
   logLevel: env.LOG_LEVEL,
   permissions: ["integration:sync"] as string[],
   publishedEvents: [] as string[],
-  // Local events the bridge relays up to CROIP.
-  consumedRoutingKeys: ["property.verified.v1","bill.issued.v1","payment.collected.v1"] as string[],
+  // Local operational events the bridge relays up to CROIP for oversight.
+  // Master data (ratepayers, properties) is the exception: those are written
+  // directly to CROIP's registries from the portal, so they never flow upstream.
+  consumedRoutingKeys: ["property.verified.v1","property.valuation_completed.v1","bill.issued.v1","payment.collected.v1","reconciliation.discrepancy_detected.v1","document.uploaded.v1"] as string[],
   // National events the bridge relays down to iDARMS.
   croipConsumedRoutingKeys: ["croip.ratepayer.registered.v1","croip.property.registered.v1"] as string[],
 };
