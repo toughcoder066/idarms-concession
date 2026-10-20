@@ -41,6 +41,10 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
     },
   });
 
+  const systemAuth: AuthContext = { subject: 'system', roles: [], permissions: ['payment:webhook'] };
+  const isPublicPath = (url: string): boolean =>
+    config.publicPaths.some((path) => url === path || url.startsWith(`${path}?`));
+
   if (config.authMode === 'zitadel') {
     if (!config.zitadelIssuer || !config.zitadelAudience || !config.zitadelJwksUri) {
       throw new Error(
@@ -51,6 +55,10 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
     const jwks = createRemoteJWKSet(new URL(config.zitadelJwksUri));
 
     app.addHook('onRequest', async (request, reply) => {
+      if (isPublicPath(request.url)) {
+        request.auth = systemAuth;
+        return;
+      }
       const token = extractBearer(request);
       if (!token) {
         return reply.code(401).send({ error: 'unauthorized', message: 'Missing bearer token' });
@@ -80,6 +88,10 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
     });
   } else {
     app.addHook('onRequest', async (request) => {
+      if (isPublicPath(request.url)) {
+        request.auth = systemAuth;
+        return;
+      }
       const headerPermissions = parsePermissions(request.headers['x-idarms-permissions']);
       request.auth = {
         subject: (request.headers['x-idarms-actor-id'] as string | undefined) ?? 'dev-actor',

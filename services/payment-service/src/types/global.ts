@@ -14,5 +14,6 @@ declare module 'fastify' {
   }
   interface FastifyRequest {
     auth: AuthContext;
+    rawBody?: Buffer | null;
   }
 }

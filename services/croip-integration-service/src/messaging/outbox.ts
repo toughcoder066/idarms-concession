@@ -59,7 +59,11 @@ function nextAttemptAt(attempts: number): Date {
  * Claim and publish a batch of committed outbox events using SKIP LOCKED
  * semantics, then mark them published only after the broker accepts them.
  */
-export async function publishDueOutbox(prisma: PrismaClient, batchSize = 100): Promise<number> {
+export async function publishDueOutbox(
+  prisma: PrismaClient,
+  batchSize = 100,
+  resolveExchange: (routingKey: string) => string = () => config.rabbitmqExchange,
+): Promise<number> {
   const rows = await prisma.$transaction(async (tx) => {
     return tx.$queryRaw<OutboxRow[]>`
       SELECT "id", "eventType", "eventVersion", "aggregateType", "aggregateId",
@@ -95,7 +99,7 @@ export async function publishDueOutbox(prisma: PrismaClient, batchSize = 100): P
     };
 
     const ok = channel.publish(
-      config.rabbitmqExchange,
+      resolveExchange(row.routingKey),
       row.routingKey,
       Buffer.from(JSON.stringify(message)),
       { persistent: true, messageId: row.id, contentType: 'application/json' },

@@ -74,6 +74,9 @@ export async function verify(prisma: PrismaClient, input: VerifyInput, context: 
       payload: {
         propertyId: property.id,
         verificationId: verification.id,
+        reference: property.reference,
+        propertyType: property.propertyType,
+        ratepayerId: property.ratepayerId,
         status: input.status,
         verifiedAt: verification.verifiedAt.toISOString(),
       },

@@ -35,12 +35,18 @@ try {
   process.exit(1);
 }
 
+function aggregateTypeFor(eventType) {
+  const type = eventType.startsWith('croip.') ? eventType.slice('croip.'.length) : eventType;
+  const head = type.split('.')[0] ?? 'event';
+  return head.charAt(0).toUpperCase() + head.slice(1);
+}
+
 const envelope = {
   id: randomUUID(),
   eventType,
   eventVersion: 1,
   producer: 'dev-publisher',
-  aggregateType: 'Dev',
+  aggregateType: aggregateTypeFor(eventType),
   aggregateId: typeof payload.id === 'string' ? payload.id : randomUUID(),
   aggregateVersion: 1,
   concessionId,

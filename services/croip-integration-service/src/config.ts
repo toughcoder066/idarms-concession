@@ -14,6 +14,8 @@ const envSchema = z.object({
   ZITADEL_JWKS_URI: z.string().optional(),
   RABBITMQ_URL: z.string().default('amqp://idarms:idarms@127.0.0.1:5672'),
   RABBITMQ_EXCHANGE: z.string().default('idarms.events'),
+  CROIP_EXCHANGE: z.string().default('croip.events'),
+  CONCESSION_ID: z.string().uuid().default('11111111-1111-1111-1111-111111111111'),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
   LOG_LEVEL: z.string().default('info'),
 });
@@ -45,9 +47,14 @@ export const config = {
   zitadelJwksUri: env.ZITADEL_JWKS_URI,
   rabbitmqUrl: env.RABBITMQ_URL,
   rabbitmqExchange: env.RABBITMQ_EXCHANGE,
+  croipExchange: env.CROIP_EXCHANGE,
+  concessionId: env.CONCESSION_ID,
   corsOrigins: env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
   logLevel: env.LOG_LEVEL,
   permissions: ["integration:sync"] as string[],
   publishedEvents: [] as string[],
+  // Local events the bridge relays up to CROIP.
   consumedRoutingKeys: ["property.verified.v1","bill.issued.v1","payment.collected.v1"] as string[],
+  // National events the bridge relays down to iDARMS.
+  croipConsumedRoutingKeys: ["croip.ratepayer.registered.v1","croip.property.registered.v1"] as string[],
 };

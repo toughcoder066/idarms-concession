@@ -49,5 +49,5 @@ export const config = {
   logLevel: env.LOG_LEVEL,
   permissions: ["reconciliation:read","reconciliation:reconcile"] as string[],
   publishedEvents: ["reconciliation.discrepancy_detected.v1"] as string[],
-  consumedRoutingKeys: ["payment.collected.v1"] as string[],
+  consumedRoutingKeys: ["bill.issued.v1","payment.collected.v1"] as string[],
 };

@@ -87,6 +87,42 @@ pnpm dev               # http://localhost:3020
 
 Health endpoints on every service: `/health/live`, `/health/ready`, `/metrics`, `/docs`.
 
+## Event pipeline
+
+Each service runs an HTTP API plus one or two RabbitMQ workers. The bridge
+(`croip-integration-service`) relays both directions and uses its outbox worker to publish to
+either `idarms.events` or `croip.events` depending on the routing key.
+
+| Service | HTTP | Workers |
+| --- | --- | --- |
+| ratepayer-service | 3020 | inbox |
+| property-registry-service | 3010 | inbox, outbox |
+| documents-service | 3050 | inbox, outbox |
+| valuation-service | 3060 | inbox, outbox |
+| billing-service | 3030 | inbox, outbox |
+| payment-service | 3040 | inbox, outbox |
+| reconciliation-service | 3070 | inbox, outbox |
+| reporting-service | 3080 | inbox, outbox |
+| croip-integration-service | 3090 | downstream, upstream, outbox |
+
+```bash
+pnpm --filter @idarms/ratepayer-service dev
+pnpm --filter @idarms/ratepayer-service worker:inbox
+```
+
+Key write endpoints (local operations):
+
+- `POST /v1/properties/:id/verify` — field verification (emits `property.verified.v1`)
+- `POST /v1/payments/checkout` — initiate payment (requires `Idempotency-Key` header)
+- `POST /v1/payments/webhook` — gateway callback (HMAC-verified when `GATEWAY_WEBHOOK_SECRET` is set)
+
+Simulate a downstream CROIP event without the bridge:
+
+```bash
+pnpm event:publish ratepayer.registered.v1 @payload.json            # idarms.events
+RABBITMQ_EXCHANGE=croip.events pnpm event:publish croip.ratepayer.registered.v1 @payload.json
+```
+
 ## Development auth
 
 Set `AUTH_MODE=disabled` only for local development. The configuration refuses this value when
@@ -99,10 +135,7 @@ Set `AUTH_MODE=disabled` only for local development. The configuration refuses t
 
 ## Regenerating services
 
-Service code is generated from the golden template. Edit
-[scripts/service-template](scripts/service-template) or
-[scripts/generate-services.mjs](scripts/generate-services.mjs), then run:
-
-```bash
-pnpm services:generate
-```
+`pnpm services:generate` regenerates `services/*` from the golden template. It is intended for
+**initial scaffolding only** — it overwrites template-derived files, including `src/events`,
+`src/modules` and `src/config.ts`. Once a service has bespoke business logic (Phase 2+), edit
+its source directly and do not regenerate that service.

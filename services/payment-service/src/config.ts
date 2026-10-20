@@ -14,6 +14,8 @@ const envSchema = z.object({
   ZITADEL_JWKS_URI: z.string().optional(),
   RABBITMQ_URL: z.string().default('amqp://idarms:idarms@127.0.0.1:5672'),
   RABBITMQ_EXCHANGE: z.string().default('idarms.events'),
+  GATEWAY_WEBHOOK_SECRET: z.string().optional(),
+  PUBLIC_PATHS: z.string().default('/v1/payments/webhook'),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
   LOG_LEVEL: z.string().default('info'),
 });
@@ -45,6 +47,8 @@ export const config = {
   zitadelJwksUri: env.ZITADEL_JWKS_URI,
   rabbitmqUrl: env.RABBITMQ_URL,
   rabbitmqExchange: env.RABBITMQ_EXCHANGE,
+  gatewayWebhookSecret: env.GATEWAY_WEBHOOK_SECRET,
+  publicPaths: env.PUBLIC_PATHS.split(',').map((path) => path.trim()).filter(Boolean),
   corsOrigins: env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
   logLevel: env.LOG_LEVEL,
   permissions: ["payment:read","payment:checkout"] as string[],
