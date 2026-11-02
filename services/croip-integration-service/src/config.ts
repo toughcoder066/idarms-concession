@@ -71,7 +71,7 @@ export const config = {
   concessionId: env.CONCESSION_ID,
   corsOrigins: env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
   logLevel: env.LOG_LEVEL,
-  permissions: ["integration:sync"] as string[],
+  permissions: ["integration:sync","assembly:read"] as string[],
   publishedEvents: [] as string[],
   // Local operational events the bridge relays up to CROIP for oversight.
   // Master data (ratepayers, properties) is the exception: those are written

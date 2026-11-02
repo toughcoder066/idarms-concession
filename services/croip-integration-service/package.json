@@ -17,7 +17,8 @@
     "worker:outbox": "tsx src/workers/outbox-worker.ts",
     "worker:inbox": "tsx src/workers/inbox-worker.ts",
     "worker:downstream": "tsx src/workers/downstream-worker.ts",
-    "worker:upstream": "tsx src/workers/upstream-worker.ts"
+    "worker:upstream": "tsx src/workers/upstream-worker.ts",
+    "assemblies:import": "tsx src/scripts/import-assemblies.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.1",

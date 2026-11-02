@@ -92,3 +92,28 @@ model SyncRecord {
   @@index([entityType, direction, status])
   @@map("sync_records")
 }
+
+// Read-only copy of the MMDAs CROIP has assigned to this concession. CROIP owns the
+// assignment (platform-governance ConcessionAssembly) and the assembly itself
+// (shared-services MunicipalAssembly). Written only by the assembly import, later by a
+// CROIP-backed provider; no API route writes it. A dropped assembly is marked REMOVED,
+// never deleted.
+model AssignedAssembly {
+  assemblyId     String    @id @db.Uuid // CROIP MunicipalAssembly id
+  concessionId   String    @db.Uuid
+  regionId       String?   @db.Uuid
+  code           String    @db.VarChar(50)
+  name           String    @db.VarChar(150)
+  category       String?   @db.VarChar(20)
+  contractStart  DateTime? @db.Date
+  contractEnd    DateTime  @db.Date
+  status         String    @default("ACTIVE") @db.VarChar(20) // ACTIVE, REMOVED
+  polygonGeoJson Json?
+  source         String    @db.VarChar(20) // MANUAL_IMPORT, CROIP
+  importVersion  Int
+  importedAt     DateTime
+  removedAt      DateTime?
+
+  @@index([concessionId, status])
+  @@map("assigned_assemblies")
+}

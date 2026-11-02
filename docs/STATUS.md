@@ -78,7 +78,13 @@ Exists = code present. Works = runs and behaves (evidence). Tests = automated te
 | CROIP credential storage and expiry tracking (secrets manager, `expiresAt` alert) | PARTIAL | env only | ? | no | no | `CROIP_CLIENT_ID/SECRET` read from env in two places (`apps/idarms-portal/src/lib/m2m.ts:20-22`, `svc/croip-integration-service/src/config.ts:21-22`). No `expiresAt`, no rotation handling, no alert. |
 | `CroipAuthClient` (token fetch, cache, refresh, no secret in logs) | PARTIAL | yes, twice | ? | no | partial | Two copies of the same code: `m2m.ts:18-71` and `svc/croip-integration-service/src/messaging/croip-gateway.ts:44-98`. Both do discovery, client_credentials with the 04 §2.2 scope form, and cache until 30 s before expiry. Missing: single-flight refresh, refetch on 401, expiry alarm. The integration copy **throws unless the token carries `gateway:ingest`** (`croip-gateway.ts:89-91`), which our credential never has (04 §2.3). |
 | `CroipHttpClient` (timeouts, retry policy, idempotency key passthrough) | NOT STARTED | timeout only | | no | no | `croip.ts:48-66` `croipPost`: one `fetch` with a timeout. No retries, no `idempotencyKey`, no problem-response mapping. |
-| `BoundaryProvider` and assigned-MMDA cache | WRONG MODEL | no | | | no | No provider. Instead **assemblies and concessions are authored locally**: `svc/concessions-management-service/prisma/schema.prisma:179-237` (`ConcessionContract`, `Assembly` with optional `croipAssemblyId`, `ConcessionAssembly`), written by `POST /v1/contracts` and `POST /v1/assemblies` (`src/modules/concessions/routes.ts:156,234`). No polygons; `gis-service` holds local zones/blocks, not CROIP boundaries. |
+| `BoundaryProvider` and assigned-MMDA cache | PARTIAL (slice 2a, 2026-11-02) | yes | yes, local DB | 19 (import 10, dates 5, route 4) | partial | **New:**
+- **Table:** `assigned_assemblies` (migration `20261102120000_assigned_assemblies`, applied to the local Docker DB).
+- **Lookup:** `BoundaryProvider` + `ManualImportBoundaryProvider` (`svc/croip-integration-service/src/modules/assemblies/boundary-provider.ts`). Contract end is enforced locally, because CROIP never checks it.
+- **Import:** operator command `assemblies:import <file> --actor <name>` (`src/scripts/import-assemblies.ts`). It validates the whole file, refuses another concession, treats the file as the full list, marks dropped assemblies REMOVED (never deleted), is idempotent, and audits every run. Verified by real runs against the local DB: create, unchanged re-run, removal, wrong-concession refusal, reactivation.
+- **Read endpoint:** `GET /v1/assigned-assemblies` follows ADR-0002 visibility. No write route.
+
+**Not yet:** polygons are stored if supplied but not used; no CROIP-backed provider (G1); nothing consumes the provider yet (slices 2, 6, 7). Previous finding still stands: | No provider. Instead **assemblies and concessions are authored locally**: `svc/concessions-management-service/prisma/schema.prisma:179-237` (`ConcessionContract`, `Assembly` with optional `croipAssemblyId`, `ConcessionAssembly`), written by `POST /v1/contracts` and `POST /v1/assemblies` (`src/modules/concessions/routes.ts:156,234`). No polygons; `gis-service` holds local zones/blocks, not CROIP boundaries. |
 | Local location pre-check against assigned MMDAs | NOT STARTED | no | | | no | `croip.ts:72-98` checks only UUID format and lat/long ranges. `assemblyId` comes from the form. |
 | Ratepayer registration proxy (idempotency key at capture) | PARTIAL | yes | ? | no | no | `apps/idarms-portal/src/app/ratepayers/new/actions.ts` → `croip.ts:72-108` `POST /v1/ratepayers`. It goes from the portal to CROIP directly, with no iDARMS API (O26). It sends no `idempotencyKey` and no `password`, which CROIP requires (04 §2.4, O19), so the call is probably rejected. It has no pre-check and no pending queue. Good: it does not write the replica. |
 | Property registration proxy (polygon, staffRef) | PARTIAL | yes | ? | no | no | `properties/new/actions.ts` → `croip.ts:110-160` `POST /v1/properties`. It sends no `staffRef` (required, 04 §2.5) and no `idempotencyKey`. It adds `code` and `registrationSource:'CONCESSION'`, which are not verified to exist in CROIP. Good: it does not write the replica. |
@@ -284,7 +290,14 @@ Each slice is small enough for one session. Owner approves before starting.
    - Route-level tests for the rates and agents refusal in concessions-mgmt. The refusal is enforced by the role lists and capabilities and covered by the contracts test.
    - `rates.ts` `requestedAsSupport` labelling is now reachable only by users who hold both the super admin and finance roles.
    - Show assembly names (not ids) in the portal's aggregated lists.
-2. **Replica guard and fixture source (ratepayer).** Steps:
+2a. **DONE 2026-11-02 (moved ahead of slice 2 by the owner).** Assigned-assembly list and `BoundaryProvider` with a manual import; see the Phase 1 row. This covers slice 4 except polygons in use and the CROIP-backed provider.
+2. **Replica guard and fixture source (ratepayer).** **Now informed by CROIP's real code (O28 answered):**
+   - The ratepayer stream is `croip.domain.v1` with keys `revenue.ratepayer.registered.v1` and `revenue.ratepayer.deleted.v1`.
+   - The envelope uses `eventId`/`data`.
+   - The registered event carries only id, code, phone and email.
+   - `aggregateVersion` is always 1.
+
+   So "newer version wins" must be designed around that (O30). Steps:
    - Add a CROIP version column.
    - Apply only newer versions.
    - Scope by an assigned-assembly set (not the envelope), and drop and log the rest.

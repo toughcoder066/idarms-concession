@@ -5,6 +5,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import { PrismaClient } from '../generated/prisma';
 import { config } from './config';
 import { registerAuthPlugin } from './plugins/auth';
+import { registerAssemblyRoutes } from './modules/assemblies/routes';
 import { registerRoutes } from './modules/sync/routes';
 import './types/global';
 
@@ -21,7 +22,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         title: `${config.serviceName} API`,
         version: config.serviceVersion,
       },
-      tags: [{ name: 'sync' }],
+      tags: [{ name: 'sync' }, { name: 'assemblies' }],
     },
   });
 
@@ -44,6 +45,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   }));
 
   await app.register(registerRoutes);
+  await app.register(registerAssemblyRoutes);
 
   return app;
 }
