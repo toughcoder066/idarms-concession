@@ -10,6 +10,12 @@ Slice 1a made every service refuse a request unless both a concession and an ass
 
 1. **One application, scoped by tenancy.** Every assembly of every concession runs on the same iDARMS deployment. What a user sees is decided only by the tenant context from their verified token.
 2. **The concession super admin is the central viewer below CROIP.** They see every record of every assembly in **their own concession** (ratepayers, properties, bills, payments, valuations, reconciliation, documents, reports), whether the concession has 1 or 10 assemblies. Every record shown carries the assembly it belongs to. They never see another concession.
+   - Each iDARMS installation serves one concession, so at this level other concessions do not exist; only CROIP knows them.
+   - Queries still always filter by `concessionId`. **This is a safety net, not a business rule** (owner decision, 2 Nov 2026).
+   - It guarantees no query runs unfiltered (for the super admin it is the only filter).
+   - It hides any foreign record that slips in from CROIP (G5, T4).
+   - It keeps the code safe if the system is ever hosted for more than one concessionaire, or an assembly moves between concessions.
+   - Do not remove it, and do not read it as a cross-concession feature.
 3. **The super admin does not take part in assembly operations.** They do not register, verify, value, bill, collect, reconcile, draft rates or assign field agents in any assembly. Those stay with each assembly's own staff.
 4. **The super admin keeps administration and support powers only:**
    - onboarding new assemblies (workspace setup, inviting the first Assembly Admin);
