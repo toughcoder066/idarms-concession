@@ -118,7 +118,7 @@ Cross-cutting facts recorded from the deferred code. They are violations of CLAU
 |---|---|---|---|---|---|---|
 | Service template conformance (health, metrics, OpenAPI, env validation) | PARTIAL | yes | ? | no | n/a | Each service has `config.ts` (zod env), `app.ts`, and the `routes/service/policy/schemas` split. README lists `/health/live`, `/health/ready`, `/metrics` and `/docs`, but these were not exercised. |
 | ZITADEL token validation and `urn:idarms:context` | PARTIAL | yes | ? | partial (concessions-mgmt context tests) | n/a | `svc/*/src/plugins/auth.ts` (JWKS, issuer, audience). `AUTH_MODE` defaults to `disabled` and is refused only when `NODE_ENV=production` (`croip-integration-service/src/config.ts:41-43`); see T3. Context comes from the org registry, not a claim (T5). No CROIP token claim is read. |
-| Tenancy filters (concession + Assembly) and isolation tests | PARTIAL (fail-open) | yes | ? | none outside concessions-mgmt | no | Filters come from `request.auth`, but an unresolved context removes them (T1). `GET /v1/sync` ignores scope entirely. Event handlers trust envelope tenant ids (T4). |
+| Tenancy filters (concession + Assembly) and isolation tests | PARTIAL | yes | ? | 13 route tests (ratepayer 5, property 5, croip-integration 3) | partial | **Slice 1a, 2026-11-02:** routes in the 9 template services and the service template now pass `requireTenant`, which returns 403 `tenant_unresolved` unless both ids are resolved (`svc/*/src/plugins/auth.ts`). `TenantScope` fields are required, so an unscoped query no longer compiles. `GET /v1/sync[/:id]` returns 503 `not_available` (`svc/croip-integration-service/src/modules/sync/routes.ts`) and the unscoped `sync/service.ts` was deleted. The tests fail against the old routes (checked). **Consequence:** PORTFOLIO-scoped callers (concession-level org, no assembly), including the portal's default dev context (`IDARMS_SCOPE_LEVEL=PORTFOLIO`, empty `IDARMS_ASSEMBLY_ID`), now get 403 from these 9 services until O29 decides whether concession-wide reads are allowed. Still open: event handlers trust envelope tenant ids (T4). |
 | Outbox + worker per service | DONE (pattern) | yes | ? | no | partial | `svc/*/src/messaging/outbox.ts`: written in the business tx; the claim tx (`FOR UPDATE SKIP LOCKED`) commits before publishing, so two workers could double-publish (consumers dedupe). Retries keep the same id. |
 | Inbox / `processOnce` | PARTIAL | yes | ? | no | partial | `svc/*/src/messaging/inbox.ts` (unique `(consumerId, messageId)`, same tx); ack after commit. **No dead-lettering**: all workers `nack(requeue=true)`. No envelope validation (`JSON.parse(...) as EventEnvelope`). |
 | Idempotency keys on financial commands | DEFERRED | payment checkout only | | | | `IdempotencyRecord` in every schema; used in `payment-service`. |
@@ -207,7 +207,7 @@ Ordered by risk.
 
 **Tenancy leaks**
 
-T1. **The tenant filter disappears when the tenant context is unset (critical).** In the auth plugin, `concessionId` and `assemblyId` are `context?.concessionId`. They become `undefined` when `resolveOrgContext` returns null:
+T1. **FIXED in slice 1a (2026-11-02) for the 9 template services; see the tenancy row above.** **The tenant filter disappears when the tenant context is unset (critical).** In the auth plugin, `concessionId` and `assemblyId` are `context?.concessionId`. They become `undefined` when `resolveOrgContext` returns null:
 - `svc/*/src/plugins/auth.ts`, e.g. `ratepayer-service/src/plugins/auth.ts:95-106`.
 - `resolveOrgContext` returns null on 404, non-OK, timeout or exception (`src/lib/org-context.ts:15-40`).
 
@@ -241,7 +241,7 @@ Verified OK by the tenancy review:
 - No staff PII and no staff records are sent to CROIP.
 - Staff and agents are created only in iDARMS's ZITADEL.
 
-4. `GET /v1/sync` and `/v1/sync/:id` return every `sync_records` row regardless of the caller's concession or assembly (`svc/croip-integration-service/src/modules/sync/service.ts:8-18`).
+4. **FIXED in slice 1a (closed with 503 until rebuilt).** `GET /v1/sync` and `/v1/sync/:id` return every `sync_records` row regardless of the caller's concession or assembly (`svc/croip-integration-service/src/modules/sync/service.ts:8-18`).
 5. The sync bridge scopes by trusting the envelope `concessionId` against one env value, with no assembly filter (`downstream-worker.ts:27`). Replica handlers write `event.assemblyId` unchecked (`ratepayer.handler.ts:29`, `property.handler.ts:152`). Acceptance test 7 is not met.
 6. Ratepayer `reference` and `ghanaCardId` are globally unique, not scoped. A collision becomes a poison message that loops forever, because there is no DLQ.
 
@@ -264,8 +264,8 @@ Verified OK by the tenancy review:
 
 Each slice is small enough for one session. Owner approves before starting.
 
-1. **Commit or branch the working tree as-is** (owner action, no code change), so the audit has a reproducible base. Depends on: nothing.
-1a. **Fail closed on missing tenant context (T1) and fix `/v1/sync` scoping.** Steps:
+1. **DONE 2026-11-02.** The working tree was committed as-is on branch `wip/pre-audit-snapshot` (`b36a156`). Nothing was pushed.
+1a. **DONE 2026-11-02 (with a change of plan): `/v1/sync` is closed (503) instead of migrated, because the relay table is likely to be replaced in slice 2.** Fail closed on missing tenant context (T1) and fix `/v1/sync` scoping. Steps:
    - Add a shared guard that returns 403 when `concessionId` or `assemblyId` is unresolved.
    - Apply it in the ratepayer, property and croip-integration services first.
    - Add a cross-tenant and an unresolved-context test per route.

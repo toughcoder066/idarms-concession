@@ -1,28 +1,26 @@
 import { createHmac } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { config } from '../../config';
-import { requirePermissions } from '../../plugins/auth';
+import { requirePermissions, requireTenant, tenantOf } from '../../plugins/auth';
 import { byIdParamsSchema, checkoutBodySchema, listQuerySchema, webhookBodySchema } from './schemas';
 import * as service from './service';
 import type { CheckoutInput, WebhookInput } from './service';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get('/v1/payments', {
-    preHandler: requirePermissions(['payment:read']),
+    preHandler: [requirePermissions(['payment:read']), requireTenant],
     schema: { querystring: listQuerySchema },
   }, async (request) => {
-    const { concessionId, assemblyId } = request.auth;
-    const rows = await service.list(app.prisma, { concessionId, assemblyId });
+    const rows = await service.list(app.prisma, tenantOf(request));
     return { data: rows };
   });
 
   app.get('/v1/payments/:id', {
-    preHandler: requirePermissions(['payment:read']),
+    preHandler: [requirePermissions(['payment:read']), requireTenant],
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { concessionId, assemblyId } = request.auth;
-    const row = await service.getById(app.prisma, id, { concessionId, assemblyId });
+    const row = await service.getById(app.prisma, id, tenantOf(request));
     if (!row) {
       return reply.code(404).send({ error: 'not_found', message: 'Resource not found' });
     }
@@ -30,13 +28,10 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/v1/payments/checkout', {
-    preHandler: requirePermissions(['payment:checkout']),
+    preHandler: [requirePermissions(['payment:checkout']), requireTenant],
     schema: { body: checkoutBodySchema },
   }, async (request, reply) => {
-    const { concessionId, assemblyId } = request.auth;
-    if (!concessionId || !assemblyId) {
-      return reply.code(400).send({ error: 'bad_request', message: 'Missing concession/assembly context' });
-    }
+    const { concessionId, assemblyId } = tenantOf(request);
 
     const idempotencyKey = request.headers['idempotency-key'] as string | undefined;
     if (!idempotencyKey) {

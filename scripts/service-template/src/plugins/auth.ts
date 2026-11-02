@@ -131,3 +131,32 @@ export function requirePermissions(required: string[]) {
     }
   };
 }
+
+export interface TenantContext {
+  concessionId: string;
+  assemblyId: string;
+}
+
+/**
+ * Fail closed: a request whose concession or assembly could not be resolved
+ * never reaches a query. Prisma drops undefined filter keys, so letting an
+ * unresolved context through would return every tenant's rows.
+ */
+export async function requireTenant(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const { concessionId, assemblyId } = request.auth;
+  if (!concessionId || !assemblyId) {
+    await reply.code(403).send({
+      error: 'tenant_unresolved',
+      message: 'Concession and assembly context could not be resolved',
+    });
+  }
+}
+
+/** Tenant context of a request that has passed requireTenant. */
+export function tenantOf(request: FastifyRequest): TenantContext {
+  const { concessionId, assemblyId } = request.auth;
+  if (!concessionId || !assemblyId) {
+    throw new Error('tenantOf called on a route without requireTenant');
+  }
+  return { concessionId, assemblyId };
+}

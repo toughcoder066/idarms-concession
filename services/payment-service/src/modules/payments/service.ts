@@ -4,8 +4,8 @@ import { appendOutboxEvent } from '../../messaging/outbox';
 import { buildEnvelope } from '../../messaging/events';
 
 export interface TenantScope {
-  concessionId?: string;
-  assemblyId?: string;
+  concessionId: string;
+  assemblyId: string;
 }
 
 export async function list(prisma: PrismaClient, scope: TenantScope) {

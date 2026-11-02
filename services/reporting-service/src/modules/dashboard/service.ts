@@ -1,8 +1,8 @@
 import type { PrismaClient } from '../../../generated/prisma';
 
 export interface TenantScope {
-  concessionId?: string;
-  assemblyId?: string;
+  concessionId: string;
+  assemblyId: string;
 }
 
 export async function list(prisma: PrismaClient, scope: TenantScope) {
