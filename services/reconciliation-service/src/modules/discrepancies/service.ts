@@ -7,12 +7,12 @@ export interface TenantScope {
 
 export async function list(prisma: PrismaClient, scope: TenantScope) {
   return prisma.discrepancy.findMany({
-    where: {},
+    where: { concessionId: scope.concessionId, assemblyId: scope.assemblyId },
   });
 }
 
 export async function getById(prisma: PrismaClient, id: string, scope: TenantScope) {
   return prisma.discrepancy.findFirst({
-    where: { id },
+    where: { id, concessionId: scope.concessionId, assemblyId: scope.assemblyId },
   });
 }

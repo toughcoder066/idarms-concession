@@ -33,9 +33,8 @@ export async function recordDownstreamSync(tx: Prisma.TransactionClient, event: 
 }
 
 /**
- * Upstream relay: a local operational event is recorded in the SyncRecord
- * ledger and re-published onto the national croip.events exchange with the
- * croip.* routing-key prefix CROIP expects.
+ * Upstream relay: record the event as pending and enqueue it for delivery
+ * through CROIP's Reporting Gateway.
  */
 export async function recordUpstreamSync(tx: Prisma.TransactionClient, event: EventEnvelope): Promise<void> {
   const entityType = event.aggregateType;
@@ -48,11 +47,11 @@ export async function recordUpstreamSync(tx: Prisma.TransactionClient, event: Ev
       entityType,
       entityId,
       direction: 'UPSTREAM',
-      status: 'SYNCED',
+      status: 'PENDING',
       croipReference: null,
       lastSyncedAt: now,
     },
-    update: { status: 'SYNCED', lastSyncedAt: now },
+    update: { status: 'PENDING', croipReference: null, lastSyncedAt: now },
   });
 
   const croipKey = `croip.${event.eventType}`;

@@ -9,7 +9,8 @@ const propertyVerifiedSchema = z.object({
 
 const billIssuedSchema = z.object({
   billId: z.string().uuid(),
-  amountDue: z.number(),
+  totalAmount: z.number().optional(),
+  amountDue: z.number().optional(),
 });
 
 const paymentCollectedSchema = z.object({
@@ -61,7 +62,11 @@ export async function handlePropertyVerified(tx: Prisma.TransactionClient, event
 
 export async function handleBillIssued(tx: Prisma.TransactionClient, event: EventEnvelope): Promise<void> {
   const payload = billIssuedSchema.parse(event.payload);
-  await upsertMetric(tx, event, { totalBilled: payload.amountDue });
+  const totalAmount = payload.totalAmount ?? payload.amountDue;
+  if (totalAmount === undefined) {
+    throw new Error('bill.issued.v1 payload is missing totalAmount/amountDue');
+  }
+  await upsertMetric(tx, event, { totalBilled: totalAmount });
 }
 
 export async function handlePaymentCollected(tx: Prisma.TransactionClient, event: EventEnvelope): Promise<void> {

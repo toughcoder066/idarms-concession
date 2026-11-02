@@ -5,24 +5,56 @@ import { buildEnvelope, type EventEnvelope } from '../messaging/events';
 
 const billIssuedSchema = z.object({
   billId: z.string().uuid(),
-  billNumber: z.string(),
-  amountDue: z.number(),
+  billNumber: z.string().optional(),
+  propertyId: z.string().uuid().optional(),
+  fiscalYear: z.number().int().optional(),
+  totalAmount: z.number().optional(),
+  amountDue: z.number().optional(),
+  amountPaid: z.number().optional(),
+  currency: z.string().default('GHS'),
+  status: z.string().optional(),
 });
 
 const paymentCollectedSchema = z.object({
   paymentId: z.string().uuid(),
   billId: z.string().uuid(),
   amount: z.number(),
+  currency: z.string().default('GHS'),
   status: z.string(),
 });
 
 export async function handleBillIssued(tx: Prisma.TransactionClient, event: EventEnvelope): Promise<void> {
   const payload = billIssuedSchema.parse(event.payload);
+  const totalAmount = payload.totalAmount ?? payload.amountDue;
+  if (totalAmount === undefined) {
+    throw new Error('bill.issued.v1 payload is missing totalAmount/amountDue');
+  }
 
   await tx.billReplica.upsert({
     where: { id: payload.billId },
-    create: { id: payload.billId, amountDue: payload.amountDue },
-    update: { amountDue: payload.amountDue },
+    create: {
+      id: payload.billId,
+      concessionId: event.concessionId,
+      assemblyId: event.assemblyId,
+      propertyId: payload.propertyId ?? '00000000-0000-0000-0000-000000000000',
+      fiscalYear: payload.fiscalYear ?? 0,
+      totalAmount,
+      amountPaid: payload.amountPaid ?? 0,
+      currency: payload.currency,
+      status: payload.status ?? 'UNPAID',
+      syncedAt: new Date(),
+    },
+    update: {
+      concessionId: event.concessionId,
+      assemblyId: event.assemblyId,
+      propertyId: payload.propertyId ?? '00000000-0000-0000-0000-000000000000',
+      fiscalYear: payload.fiscalYear ?? 0,
+      totalAmount,
+      amountPaid: payload.amountPaid ?? 0,
+      currency: payload.currency,
+      status: payload.status ?? 'UNPAID',
+      syncedAt: new Date(),
+    },
   });
 }
 
@@ -31,8 +63,24 @@ export async function handlePaymentCollected(tx: Prisma.TransactionClient, event
 
   await tx.paymentReplica.upsert({
     where: { id: payload.paymentId },
-    create: { id: payload.paymentId, billId: payload.billId, amount: payload.amount, status: payload.status },
-    update: { amount: payload.amount, status: payload.status },
+    create: {
+      id: payload.paymentId,
+      concessionId: event.concessionId,
+      assemblyId: event.assemblyId,
+      billId: payload.billId,
+      amount: payload.amount,
+      currency: payload.currency,
+      status: payload.status,
+      syncedAt: new Date(),
+    },
+    update: {
+      concessionId: event.concessionId,
+      assemblyId: event.assemblyId,
+      amount: payload.amount,
+      currency: payload.currency,
+      status: payload.status,
+      syncedAt: new Date(),
+    },
   });
 
   const bill = await tx.billReplica.findUnique({ where: { id: payload.billId } });
@@ -40,8 +88,21 @@ export async function handlePaymentCollected(tx: Prisma.TransactionClient, event
   let reason: 'AMOUNT_MISMATCH' | 'UNMATCHED_PAYMENT' | null = null;
   if (!bill) {
     reason = 'UNMATCHED_PAYMENT';
-  } else if (Number(bill.amountDue) !== payload.amount) {
-    reason = 'AMOUNT_MISMATCH';
+  } else {
+    const totalAmount = Number(bill.totalAmount);
+    const remaining = Math.max(0, totalAmount - Number(bill.amountPaid));
+    if (payload.amount > remaining + 0.005) {
+      reason = 'AMOUNT_MISMATCH';
+    } else {
+      const amountPaid = Number(bill.amountPaid) + payload.amount;
+      await tx.billReplica.update({
+        where: { id: bill.id },
+        data: {
+          amountPaid,
+          status: amountPaid >= totalAmount ? 'PAID' : 'PARTIALLY_PAID',
+        },
+      });
+    }
   }
 
   if (!reason) return;
@@ -52,7 +113,13 @@ export async function handlePaymentCollected(tx: Prisma.TransactionClient, event
   if (existing) return;
 
   const discrepancy = await tx.discrepancy.create({
-    data: { billId: payload.billId, paymentId: payload.paymentId, reason },
+    data: {
+      concessionId: event.concessionId,
+      assemblyId: event.assemblyId,
+      billId: payload.billId,
+      paymentId: payload.paymentId,
+      reason,
+    },
   });
 
   const envelope = buildEnvelope({

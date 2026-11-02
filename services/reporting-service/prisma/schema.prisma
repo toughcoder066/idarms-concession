@@ -81,13 +81,15 @@ model IdempotencyRecord {
 // ============================ Domain models ============================
 model DashboardMetric {
   id                 String   @id @default(uuid()) @db.Uuid
-  concessionId       String   @db.Uuid
-  assemblyId         String   @db.Uuid
+  concessionId       String   @db.Uuid @map("concession_id")
+  assemblyId         String   @db.Uuid @map("assembly_id")
   date               DateTime @db.Date
-  totalBilled        Decimal  @db.Decimal(12, 2) @default(0)
-  totalCollected     Decimal  @db.Decimal(12, 2) @default(0)
-  propertiesVerified Int      @default(0)
+  currency           String   @default("GHS")
+  totalBilled        Decimal  @db.Decimal(14, 2) @default(0) @map("total_billed")
+  totalCollected     Decimal  @db.Decimal(14, 2) @default(0) @map("total_collected")
+  propertiesVerified Int      @default(0) @map("properties_verified")
 
   @@unique([concessionId, assemblyId, date])
+  @@index([concessionId, assemblyId])
   @@map("dashboard_metrics")
 }

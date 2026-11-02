@@ -80,25 +80,58 @@ model IdempotencyRecord {
 
 // ============================ Domain models ============================
 model BillReplica {
-  id         String  @id @db.Uuid
-  assemblyId String  @db.Uuid
-  amountDue  Decimal @db.Decimal(12, 2)
-  status     String
+  id           String    @id @db.Uuid
+  concessionId String    @db.Uuid @map("concession_id")
+  assemblyId   String    @db.Uuid @map("assembly_id")
+  propertyId   String    @db.Uuid @map("property_id")
+  fiscalYear   Int       @map("fiscal_year")
+  totalAmount  Decimal   @db.Decimal(12, 2) @map("total_amount")
+  amountPaid   Decimal   @default(0.00) @db.Decimal(12, 2) @map("amount_paid")
+  currency     String    @default("GHS")
+  status       String
+  dueDate      DateTime? @map("due_date")
+  syncedAt     DateTime  @default(now()) @map("synced_at")
 
+  @@index([concessionId, assemblyId, status])
   @@map("bill_replicas")
 }
 
-model Payment {
-  id           String   @id @default(uuid()) @db.Uuid
-  concessionId String   @db.Uuid
-  assemblyId   String   @db.Uuid
-  billId       String   @db.Uuid
-  amount       Decimal  @db.Decimal(12, 2)
-  channel      String   // MOMO, CARD
-  gatewayRef   String   @unique
-  status       String   // PENDING, SUCCESSFUL, FAILED
-  createdAt    DateTime @default(now())
+model PaymentTransaction {
+  id                 String            @id @default(uuid()) @db.Uuid
+  reference          String            @unique
+  externalReference  String?           @unique @map("external_reference")
+  billId             String            @db.Uuid @map("bill_id")
+  propertyId         String            @db.Uuid @map("property_id")
+  concessionId       String            @db.Uuid @map("concession_id")
+  assemblyId         String            @db.Uuid @map("assembly_id")
+  amount             Decimal           @db.Decimal(12, 2)
+  currency           String            @default("GHS")
+  channel            PaymentChannel    @map("channel")
+  provider           String            @default("PAYSTACK")
+  status             PaymentStatus     @default(PENDING)
+  payerPhone         String?           @map("payer_phone")
+  payerEmail         String?           @map("payer_email")
+  failureReason      String?           @map("failure_reason")
+  rawGatewayResponse Json?             @map("raw_gateway_response")
+  paidAt             DateTime?         @map("paid_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
 
   @@index([concessionId, assemblyId, status])
-  @@map("payments")
+  @@index([billId])
+  @@map("payment_transactions")
+}
+
+enum PaymentChannel {
+  MOBILE_MONEY
+  BANK_CARD
+  POS_TERMINAL
+  CASH_DESK
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REVERSED
 }

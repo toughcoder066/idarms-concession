@@ -12,9 +12,13 @@ const API = {
   property: 'http://127.0.0.1:3010',
   billing: 'http://127.0.0.1:3030',
   payment: 'http://127.0.0.1:3040',
+  documents: 'http://127.0.0.1:3050',
+  valuation: 'http://127.0.0.1:3060',
   reconciliation: 'http://127.0.0.1:3070',
   reporting: 'http://127.0.0.1:3080',
   integration: 'http://127.0.0.1:3090',
+  concessions: 'http://127.0.0.1:3100',
+  gis: 'http://127.0.0.1:3110',
   portal: 'http://127.0.0.1:3000',
 };
 
@@ -98,12 +102,16 @@ async function main() {
   console.log('\n1. Service health');
   const healthChecks = [
     ['ratepayer-service', `${API.ratepayer}/health/live`],
-    ['property-registry-service', `${API.property}/health/live`],
+    ['property-service', `${API.property}/health/live`],
     ['billing-service', `${API.billing}/health/live`],
     ['payment-service', `${API.payment}/health/live`],
+    ['documents-service', `${API.documents}/health/live`],
+    ['valuation-service', `${API.valuation}/health/live`],
     ['reconciliation-service', `${API.reconciliation}/health/live`],
     ['reporting-service', `${API.reporting}/health/live`],
     ['croip-integration-service', `${API.integration}/health/live`],
+    ['concessions-management-service', `${API.concessions}/health/live`],
+    ['gis-service', `${API.gis}/health/live`],
   ];
   for (const [name, url] of healthChecks) {
     try {
@@ -120,6 +128,24 @@ async function main() {
     fail('idarms-portal', err.message);
   }
 
+  console.log('\n1b. Concession workspace');
+  try {
+    const assemblies = await request(`${API.concessions}/v1/assemblies`);
+    assemblies.status === 200 && Array.isArray(assemblies.body?.data)
+      ? pass('assembly onboarding API', `${assemblies.body.data.length} assemblies`)
+      : fail('assembly onboarding API', `status ${assemblies.status}`);
+    const lookups = await request(`${API.concessions}/v1/lookups`);
+    lookups.status === 200 && Array.isArray(lookups.body?.data)
+      ? pass('property-type lookups', `${lookups.body.data.length} types`)
+      : fail('property-type lookups', `status ${lookups.status}`);
+    const zones = await request(`${API.gis}/v1/zones`);
+    zones.status === 200 && Array.isArray(zones.body?.data)
+      ? pass('GIS zone API', `${zones.body.data.length} zones`)
+      : fail('GIS zone API', `status ${zones.status}`);
+  } catch (err) {
+    fail('concession workspace', err.message);
+  }
+
   console.log('\n2. Downstream sync (CROIP -> iDARMS via the bridge)');
   const connection = await amqp.connect(RABBITMQ_URL);
   await publish(connection, 'croip.ratepayer.registered.v1', {
@@ -134,6 +160,8 @@ async function main() {
     reference: `SMOKE-PR-${stamp}`,
     ratepayerId,
     propertyType: 'RESIDENTIAL',
+    propertyUsage: 'SINGLE_FAMILY_HOUSE',
+    digitalAddress: 'GA-123-4567',
     gpsCoordinates: '5.60,-0.19',
     status: 'PENDING_VERIFICATION',
   });
@@ -174,19 +202,24 @@ async function main() {
       const { body } = await request(`${API.billing}/v1/bills`);
       return (body?.data ?? []).find((row) => row.propertyId === propertyId);
     });
-    pass('bill issued', `${bill.billNumber} for ${bill.amountDue}`);
+    pass('bill issued', `${bill.billNumber} for ${bill.totalAmount ?? bill.amountDue}`);
   } catch (err) {
     fail('bill issued', err.message);
   }
 
   console.log('\n4. Payment (idempotent checkout + webhook)');
   if (bill) {
-    const checkoutBody = JSON.stringify({ billId: bill.id, amount: Number(bill.amountDue), channel: 'MOMO' });
+    const checkoutBody = JSON.stringify({
+      billId: bill.id,
+      propertyId,
+      amount: Number(bill.totalAmount ?? bill.amountDue),
+      channel: 'MOBILE_MONEY',
+    });
     const head = { 'content-type': 'application/json', 'idempotency-key': idempotencyKey };
 
     const first = await request(`${API.payment}/v1/payments/checkout`, { method: 'POST', headers: head, body: checkoutBody });
     first.status === 201 && first.body?.status === 'PENDING'
-      ? pass('checkout created', first.body.gatewayRef)
+      ? pass('checkout created', first.body.externalReference ?? first.body.reference)
       : fail('checkout created', `status ${first.status}`);
 
     const replay = await request(`${API.payment}/v1/payments/checkout`, { method: 'POST', headers: head, body: checkoutBody });
@@ -197,7 +230,7 @@ async function main() {
     const conflict = await request(`${API.payment}/v1/payments/checkout`, {
       method: 'POST',
       headers: head,
-      body: JSON.stringify({ billId: bill.id, amount: 1, channel: 'MOMO' }),
+      body: JSON.stringify({ billId: bill.id, propertyId, amount: 1, channel: 'MOBILE_MONEY' }),
     });
     conflict.status === 409
       ? pass('same key + different body rejected', '409')
@@ -215,9 +248,9 @@ async function main() {
     const webhook = await request(`${API.payment}/v1/payments/webhook`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ gatewayRef: first.body.gatewayRef, status: 'SUCCESSFUL' }),
+      body: JSON.stringify({ reference: first.body.reference, status: 'SUCCESS' }),
     });
-    webhook.status === 200 && webhook.body?.status === 'SUCCESSFUL'
+    webhook.status === 200 && webhook.body?.status === 'SUCCESS'
       ? pass('webhook finalised payment')
       : fail('webhook finalised payment', `status ${webhook.status}`);
 

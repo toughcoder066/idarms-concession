@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from '../../generated/prisma';
 import { config } from '../config';
 import { getChannel } from './rabbit';
 import type { EventEnvelope } from './events';
+import { submitCloudEvent } from './croip-gateway';
 
 type TxClient = Prisma.TransactionClient;
 
@@ -56,29 +57,36 @@ function nextAttemptAt(attempts: number): Date {
 }
 
 /**
- * Claim and publish a batch of committed outbox events using SKIP LOCKED
- * semantics, then mark them published only after the broker accepts them.
+ * Claim committed events, publish local events to RabbitMQ, and submit events
+ * for CROIP to its authenticated Reporting Gateway. A row is marked published
+ * only after its destination confirms acceptance.
  */
 export async function publishDueOutbox(
   prisma: PrismaClient,
   batchSize = 100,
-  resolveExchange: (routingKey: string) => string = () => config.rabbitmqExchange,
 ): Promise<number> {
   const rows = await prisma.$transaction(async (tx) => {
-    return tx.$queryRaw<OutboxRow[]>`
+    const claimed = await tx.$queryRaw<OutboxRow[]>`
       SELECT "id", "eventType", "eventVersion", "aggregateType", "aggregateId",
              "aggregateVersion", "routingKey", "payload", "headers", "occurredAt", "attempts"
       FROM outbox_events
-      WHERE "publishedAt" IS NULL AND "nextAttemptAt" <= now()
+      WHERE "publishedAt" IS NULL
+        AND "nextAttemptAt" <= now()
+        AND ("lockedAt" IS NULL OR "lockedAt" < now() - INTERVAL '5 minutes')
       ORDER BY "occurredAt"
       LIMIT ${batchSize}
       FOR UPDATE SKIP LOCKED
     `;
+    for (const row of claimed) {
+      await tx.outboxEvent.update({ where: { id: row.id }, data: { lockedAt: new Date() } });
+    }
+    return claimed;
   });
 
   if (rows.length === 0) return 0;
 
-  const channel = await getChannel();
+  const localRows = rows.filter((row) => !row.routingKey.startsWith('croip.'));
+  const channel = localRows.length > 0 ? await getChannel() : undefined;
   let published = 0;
 
   for (const row of rows) {
@@ -86,7 +94,7 @@ export async function publishDueOutbox(
       id: row.id,
       eventType: row.eventType,
       eventVersion: row.eventVersion,
-      producer: config.serviceName,
+      producer: row.headers['producer'] ?? config.serviceName,
       aggregateType: row.aggregateType,
       aggregateId: row.aggregateId,
       aggregateVersion: row.aggregateVersion,
@@ -98,26 +106,51 @@ export async function publishDueOutbox(
       payload: row.payload,
     };
 
-    const ok = channel.publish(
-      resolveExchange(row.routingKey),
-      row.routingKey,
-      Buffer.from(JSON.stringify(message)),
-      { persistent: true, messageId: row.id, contentType: 'application/json' },
-    );
+    try {
+      let croipReference: string | undefined;
+      if (row.routingKey.startsWith('croip.')) {
+        const receipt = await submitCloudEvent(message);
+        croipReference = receipt.ingestionId;
+      } else {
+        const accepted = channel?.publish(
+          config.rabbitmqExchange,
+          row.routingKey,
+          Buffer.from(JSON.stringify(message)),
+          { persistent: true, messageId: row.id, contentType: 'application/json' },
+        );
+        if (!accepted) throw new Error('RabbitMQ publish returned false');
+      }
 
-    if (ok) {
-      await prisma.outboxEvent.update({
-        where: { id: row.id },
-        data: { publishedAt: new Date(), attempts: { increment: 1 }, lastError: null },
+      await prisma.$transaction(async (tx) => {
+        await tx.outboxEvent.update({
+          where: { id: row.id },
+          data: {
+            publishedAt: new Date(),
+            lockedAt: null,
+            attempts: { increment: 1 },
+            lastError: null,
+          },
+        });
+        if (croipReference) {
+          await tx.syncRecord.updateMany({
+            where: {
+              entityType: row.aggregateType,
+              entityId: row.aggregateId,
+              direction: 'UPSTREAM',
+            },
+            data: { status: 'SYNCED', croipReference, lastSyncedAt: new Date() },
+          });
+        }
       });
       published += 1;
-    } else {
+    } catch (err) {
       await prisma.outboxEvent.update({
         where: { id: row.id },
         data: {
           attempts: { increment: 1 },
           nextAttemptAt: nextAttemptAt(row.attempts),
-          lastError: 'publish_returned_false',
+          lockedAt: null,
+          lastError: err instanceof Error ? err.message.slice(0, 1000) : String(err).slice(0, 1000),
         },
       });
     }

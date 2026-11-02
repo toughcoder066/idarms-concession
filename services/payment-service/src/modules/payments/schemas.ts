@@ -22,18 +22,23 @@ export const checkoutBodySchema = {
   required: ['billId', 'amount', 'channel'],
   properties: {
     billId: { type: 'string' },
+    propertyId: { type: 'string' },
     amount: { type: 'number', minimum: 0 },
-    channel: { type: 'string', enum: ['MOMO', 'CARD'] },
+    channel: {
+      type: 'string',
+      enum: ['MOBILE_MONEY', 'BANK_CARD', 'POS_TERMINAL', 'CASH_DESK', 'MOMO', 'CARD'],
+    },
   },
 } as const;
 
 export const webhookBodySchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['gatewayRef', 'status'],
+  required: ['status'],
   properties: {
     gatewayRef: { type: 'string' },
-    status: { type: 'string', enum: ['SUCCESSFUL', 'FAILED'] },
+    reference: { type: 'string' },
+    status: { type: 'string', enum: ['SUCCESS', 'SUCCESSFUL', 'FAILED'] },
     amount: { type: 'number' },
   },
 } as const;

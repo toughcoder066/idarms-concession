@@ -6,6 +6,7 @@ export const ROUTING_KEYS = {
   billIssued: 'bill.issued.v1',
   paymentCollected: 'payment.collected.v1',
   documentUploaded: 'document.uploaded.v1',
+  feeFixingPublished: 'fee_fixing.published.v1',
   discrepancyDetected: 'reconciliation.discrepancy_detected.v1',
 } as const;
 

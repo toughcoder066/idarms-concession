@@ -4,8 +4,10 @@ interface Bill {
   id: string;
   billNumber: string;
   propertyId: string;
-  amountDue: string;
+  totalAmount?: string;
+  amountDue?: string;
   amountPaid: string;
+  currency?: string;
   status: string;
   fiscalYear: number;
 }
@@ -45,7 +47,7 @@ export default async function BillingPage() {
                     <td>{b.billNumber}</td>
                     <td>{b.propertyId}</td>
                     <td>{b.fiscalYear}</td>
-                    <td>{b.amountDue}</td>
+                    <td>{b.totalAmount ?? b.amountDue}</td>
                     <td>{b.amountPaid}</td>
                     <td><span className="badge">{b.status}</span></td>
                   </tr>

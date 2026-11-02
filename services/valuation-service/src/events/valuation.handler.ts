@@ -8,7 +8,8 @@ const propertyVerifiedSchema = z.object({
   verificationId: z.string().uuid(),
   reference: z.string().optional(),
   propertyType: z.string().optional(),
-  status: z.enum(['APPROVED', 'REJECTED']),
+  propertyUsage: z.string().optional(),
+  status: z.enum(['APPROVED', 'REJECTED', 'NEEDS_CORRECTION']),
   verifiedAt: z.string().datetime(),
 });
 
@@ -17,24 +18,38 @@ const MARKET_VALUE_BY_TYPE: Record<string, number> = {
   RESIDENTIAL: 120000,
   COMMERCIAL: 280000,
   INDUSTRIAL: 450000,
+  MIXED_USE: 320000,
+  GOVERNMENTAL: 500000,
   AGRICULTURAL: 60000,
+  UNCLASSIFIED: 120000,
 };
 const TAXABLE_RATE = 0.75;
 
 export async function handlePropertyVerified(tx: Prisma.TransactionClient, event: EventEnvelope): Promise<void> {
   const payload = propertyVerifiedSchema.parse(event.payload);
-  const propertyType = payload.propertyType ?? 'RESIDENTIAL';
-  const replicaStatus = payload.status === 'APPROVED' ? 'VERIFIED' : 'PENDING_VERIFICATION';
+  const propertyType = payload.propertyType ?? 'UNCLASSIFIED';
+  const propertyUsage = payload.propertyUsage ?? 'GENERAL';
+  const replicaStatus = payload.status === 'APPROVED' ? 'VERIFIED' : 'SUBMITTED';
 
   await tx.propertyReplica.upsert({
     where: { id: payload.propertyId },
     create: {
       id: payload.propertyId,
+      concessionId: event.concessionId,
       assemblyId: event.assemblyId,
       propertyType,
+      propertyUsage,
       status: replicaStatus,
+      lastSyncedAt: new Date(),
     },
-    update: { propertyType, status: replicaStatus },
+    update: {
+      concessionId: event.concessionId,
+      assemblyId: event.assemblyId,
+      propertyType,
+      propertyUsage,
+      status: replicaStatus,
+      lastSyncedAt: new Date(),
+    },
   });
 
   if (payload.status !== 'APPROVED') {
@@ -42,20 +57,32 @@ export async function handlePropertyVerified(tx: Prisma.TransactionClient, event
   }
 
   const fiscalYear = new Date().getFullYear();
-  const baseValue = MARKET_VALUE_BY_TYPE[propertyType] ?? MARKET_VALUE_BY_TYPE.RESIDENTIAL;
+  const baseValue = MARKET_VALUE_BY_TYPE[propertyType] ?? MARKET_VALUE_BY_TYPE.UNCLASSIFIED;
   const marketValue = Math.round(baseValue * 100) / 100;
   const taxableValue = Math.round(marketValue * TAXABLE_RATE * 100) / 100;
 
   const valuation = await tx.valuation.upsert({
     where: { propertyId: payload.propertyId },
     create: {
-      propertyId: payload.propertyId,
+      concessionId: event.concessionId,
       assemblyId: event.assemblyId,
+      propertyId: payload.propertyId,
+      propertyType,
+      propertyUsage,
+      marketValue,
+      taxableValue,
+      fiscalYear,
+      basis: 'SCAFFOLD_MARKET_VALUE',
+    },
+    update: {
+      concessionId: event.concessionId,
+      assemblyId: event.assemblyId,
+      propertyType,
+      propertyUsage,
       marketValue,
       taxableValue,
       fiscalYear,
     },
-    update: { marketValue, taxableValue, fiscalYear },
   });
 
   const envelope = buildEnvelope({
@@ -70,6 +97,8 @@ export async function handlePropertyVerified(tx: Prisma.TransactionClient, event
     payload: {
       valuationId: valuation.id,
       propertyId: payload.propertyId,
+      propertyType: valuation.propertyType,
+      propertyUsage: valuation.propertyUsage,
       marketValue: Number(valuation.marketValue),
       taxableValue: Number(valuation.taxableValue),
       fiscalYear: valuation.fiscalYear,

@@ -1,0 +1,636 @@
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+Central Platform Architecture and
+Interoperability Framework
+Federated government revenue collection and national oversight
+Version 1.0 | Proposed design | 8 October 2026
+
+Purpose and recommended model
+We propose a federated model in which each concessionaire operates its own revenue collection system within its
+authorised concession and reports standardised information to a Central Revenue Oversight and Integration Platform,
+referred to in this framework as the Central Platform. Government receives a consolidated view of assessments,
+collections, settlements, messaging and operating performance.
+This framework defines the responsibilities, architecture, data contracts, security controls and operating rules needed
+to connect the independent systems. It provides a basis for consortium agreement, Government review and
+subsequent detailed design. It does not award concessions, establish regulatory authority or determine software
+ownership.
+
+Design commitments
+•    Concessionaire systems retain operational control of registration, assessment, billing, collection channels and
+     customer support.
+•    The Central Platform receives durable events and provides national monitoring, reconciliation, audit and
+     approved shared services.
+•    Government controls the oversight mandate, access policy, concession register and approved reporting
+     standards.
+•    A central outage does not normally stop authorised local collection. Queued reports are delivered and reconciled
+     after recovery.
+•    Central acceptance of a report is distinct from provider confirmation of payment and bank confirmation of
+     settlement.
+
+Assumptions requiring agreement
+The number of concessionaires, territories, revenue types, settlement accounts and contracting entities remain to be
+confirmed. iDARMS is treated as one potential concessionaire platform. Its existing assets and the assets of other
+members remain subject to their verified ownership and agreed licences. All numerical service targets in this
+framework are proposed planning values, not existing commitments.
+
+Reading guide
+Sections 1 to 3 cover responsibilities and architecture; sections 4 to 7 define interoperability and financial controls;
+sections 8 to 10 cover security, operations and governance; sections 11 and 12 set out implementation and approval
+requirements.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026        1
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+1 Operating model and responsibility boundaries
+A concession is an authorisation to collect specified revenue within a defined scope and period. A concessionaire may
+be a company or a consortium. A consortium partner does not gain collection authority solely through membership.
+The Central Platform must identify the legally authorised concessionaire separately from its technology provider and
+any member companies.
+
+Function                 Concessionaire responsibility             Central responsibility
+
+Registration and         Maintain customer and revenue accounts    Map approved identifiers and resolve authorised
+identity                                                           reference queries
+
+Assessment and           Apply approved rules and issue bills      Receive assessment versions and monitor totals
+billing
+
+Collection and           Initiate payments and issue verifiable    Record reported outcomes and verify receipt
+receipts                 receipts                                  references
+
+Agents and devices       Manage staff, POS and field operations    Validate concession scope and monitor registered
+                                                                   identifiers
+
+Financial                Resolve local payment and settlement      Reconcile independent evidence and manage
+reconciliation           issues                                    national exceptions
+
+Messaging and            Request messages and handle customers     Provide shared delivery and monitor escalations
+support
+
+Data and reporting       Keep complete local records and report    Provide national reporting with completeness
+                         events                                    indicators
+
+Availability and         Queue events and restore local services   Restore ingestion, replay and rebuild national
+recovery                                                           views
+
+
+
+Authority and isolation
+The Government-approved concession register defines concessionaire ID, authority, jurisdiction codes, revenue
+codes, effective dates, settlement arrangements and status. Versioned changes have future or explicit effective dates.
+Offline collection uses an approved cached scope with a defined expiry and risk policy; central validation flags out-of-
+scope reports for investigation rather than silently discarding financial evidence.
+Each concessionaire accesses its own records and approved shared references. Government and auditors access
+wider data only under assigned roles. Competitors do not receive each other’s identifiable customers, pricing or
+detailed operating data through shared dashboards.
+
+Money movement
+Funds move through approved payment providers and bank accounts under the concession and Government
+settlement arrangements. The Central Platform records and reconciles those flows. Authority to initiate refunds,
+move funds, deduct fees or distribute commissions requires a separately approved mandate and financial controls.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026        2
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+2 Reference architecture
+
+
+
+
+Figure 1 Logical architecture. Local reports flow upwards into central services. Acknowledgements, reference updates
+and messaging outcomes return through the same authenticated integration boundary. Independent financial feeds
+support reconciliation. The diagram shows logical services rather than a required number of servers.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026     3
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+3 Central services and deployment design
+Integration and event processing
+The external reporting gateway authenticates each concessionaire, checks authorised scope and validates contract
+versions. It stores accepted submissions durably before returning a receipt. An internal event bus delivers them to
+transaction processing, reconciliation, messaging, audit and analytical consumers. Separate queues and quotas
+prevent one concessionaire’s backlog from exhausting national capacity.
+Invalid business records enter a restricted quarantine with a reason and correction route. Unauthenticated requests
+are rejected. Processing failures use retries and a dead-letter queue. Accepted raw events remain available for replay,
+and consumer checkpoints support rebuilding derived views without changing financial history.
+
+Data services
+•    Operational repository stores validated transaction histories, current views, concession references and exception
+     cases.
+•    Event archive preserves original accepted payloads, hashes, processing decisions and correction links under
+     controlled retention.
+•    Warehouse receives curated, minimised data for national analytics. Dashboards show reporting lag, missing feeds
+     and financial verification status.
+•    Audit service records administrative changes, queries of sensitive records, approvals, exports and privileged
+     activity.
+
+Deployment topology
+Use separate development, test, certification and production environments. Production should span independent
+failure domains with redundant gateways, processing nodes and database replicas. Place public ingress behind
+network filtering and application protection; keep brokers and databases on private networks. Deploy a separately
+recoverable disaster recovery environment and test failover with each concessionaire.
+A practical starting stack is containerised services, a relational operational database, a durable message broker, object
+storage for the event archive, and a warehouse or reporting database. Product choice follows workload tests and
+support capacity. Kubernetes, Kafka, RabbitMQ and a separate data lake are options, not mandatory prerequisites. A
+smaller well-operated platform can meet initial needs.
+
+External interfaces
+Independent provider and bank adapters import authenticated APIs, webhooks or protected signed files. Each feed
+records origin, extraction time, coverage period and completeness. Government, identity and GIS integration uses
+authorised interfaces. No connection to a national identity system is assumed until the responsible authority
+approves access.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026       4
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+4 Interoperability rules and API catalogue
+All concessionaires implement the same externally published contracts while retaining their internal technology. The
+Central Platform operator maintains a sandbox, OpenAPI descriptions, event schemas, code lists, examples and a
+certification suite. The API catalogue below is a proposed baseline, not an implemented interface.
+
+Interface                                              Purpose and required behaviour
+
+POST /v1/events                                        Submit one event; return durable ingestion ID and status URL.
+
+POST /v1/event-batches                                 Submit bounded batches; return a result for every item.
+
+GET /v1/ingestions/{id}                                Check received, validated, applied or quarantined status.
+
+GET /v1/reference-data                                 Retrieve versioned authorities, revenue codes and scope data.
+
+POST /v1/messages                                      Request an approved message with an idempotency key.
+
+GET /v1/messages/{id}                                  Retrieve provider acceptance and delivery status separately.
+
+GET /v1/receipts/{id}/verification                     Verify a receipt with minimal disclosure and rate limits.
+
+POST /v1/control-totals                                Submit period counts, amounts and manifest references.
+
+GET /v1/exceptions                                     View scoped cases; controlled actions use separate permissions.
+
+POST /v1/provider-evidence                             Restricted independent financial-feed submission.
+
+
+
+Transport and responses
+Use HTTPS with JSON encoded in UTF-8, UTC timestamps with explicit offsets, fixed decimal money or integer minor
+units, currency codes and published identifiers. Define size limits, pagination and timeouts in the contract. HTTP 202
+indicates durable receipt only. Item status determines business acceptance. Invalid schemas return an explanatory
+4xx response; rate limits return 429 with retry guidance. Transient 5xx errors and timeouts are retried using the
+original event ID.
+
+Authentication and versioning
+Use separate machine credentials for each concessionaire and environment, short-lived OAuth access tokens, and
+mutual TLS for reporting clients. Tokens identify the client and permitted scopes. Human access uses federated
+OpenID Connect with multi-factor authentication. Apply OAuth security guidance [3].
+Pin an OpenAPI version compatible with all partners [1], and use CloudEvents 1.0 metadata for the event envelope
+[2]. API major versions and payload schema versions are explicit. Additive optional fields may be compatible; changed
+meanings or mandatory fields require a new version. Proposed policy: publish breaking changes at least 180 days
+before retirement, support old and new versions in parallel, and certify every partner before cutover.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026                5
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+5 Canonical data model and event catalogue
+The event envelope uses CloudEvents attributes id, source, specversion and type, with time, subject and dataschema
+supplied by this framework. The combination of source and id identifies an event. The payload carries concession and
+financial references. The gateway derives the authorised tenant from credentials and checks it against the payload.
+
+Field group                 Required content and rule
+
+Event identity              Stable event ID, source, event type, schema version and correlation ID.
+
+Business identity           Concessionaire ID, concession ID, authority code, jurisdiction code and revenue code.
+
+Object references           Assessment, invoice, payment and receipt IDs as applicable; namespace with issuer.
+
+Money                       Currency, gross amount, fee, net amount and allocation lines as applicable; no binary
+                            floating point.
+
+Payment evidence            Provider ID and reference, channel, payment time and declared outcome.
+
+Timing and ordering         Occurred time, local recorded time, central received time, aggregate ID and aggregate
+                            version.
+
+Customer reference          Opaque revenue account reference; approved identity mappings stored separately.
+
+Field operation             Agent and device ID where relevant; location only when justified.
+
+Corrections                 Original event or transaction reference, reason, authorisation reference and replacement
+                            version.
+
+
+
+Minimum event families
+AssessmentCreated, AssessmentAmended, AssessmentCancelled; InvoiceIssued and InvoiceCancelled;
+PaymentInitiated, PaymentConfirmed, PaymentFailed and PaymentReversed; ReceiptIssued; RefundRequested,
+RefundApproved and RefundCompleted; SettlementReported and SettlementConfirmed; AgentStatusChanged and
+DeviceStatusChanged; MessageRequested and MessageDeliveryUpdated. Independent provider evidence remains
+distinguishable from concessionaire reports.
+
+Identity and reference policy
+Account, person, property, business and invoice are separate entities. A phone number is a contact channel and must
+not be treated as a unique person identifier. Use approved identity references only where needed. Concessionaire
+account IDs map to a central opaque reference through a controlled process; uncertain matches require review.
+Ownership changes to a property or business preserve historical liability and payment records.
+Money allocations support partial payments, one payment against several invoices, and several payments against one
+invoice. A failed attempt creates no collected revenue. Refunds, reversals and amendments preserve original records
+and link compensating entries. Published code lists define each state and its allowed transitions.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026            6
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+6 Reliable reporting and offline recovery
+Local commit and durable delivery
+The concessionaire writes the business transaction and its reporting event to a durable outbox in the same local
+database transaction, or implements an equivalent tested atomic mechanism. A delivery worker sends pending
+events, retains receipt IDs and retries with exponential backoff and jitter. A lost acknowledgement triggers resend of
+the same event, not creation of a new financial event.
+The central gateway durably records the envelope before acknowledgement. Consumers apply an event
+idempotently, so repeated delivery produces one business effect. A duplicate with the same identity and matching
+payload returns the original status. The same identity with different content is quarantined as a conflict. Delivery is at
+least once; the design does not assume exactly-once network transport.
+
+Ordering and completeness
+Ordering applies per business object, using an aggregate version. A refund arriving before its payment waits for its
+predecessor or enters a dependency exception. There is no requirement for a single global sequence. Late events
+retain their occurred time and central received time so accounting-period updates remain traceable.
+Each partner sends period manifests containing event counts, financial totals by currency and event family, first and
+last sequence markers, and missing sequence declarations where applicable. Compare these with central receipts and
+applied events. A heartbeat confirms connectivity only; it does not prove that all transactions were reported.
+
+Offline collection
+Field devices use encrypted local storage, unique local references, authenticated operators and approved cached
+concession rules. Offline payment capture must distinguish a collection claim from confirmed electronic payment.
+Receipts indicate provisional status where confirmation is unavailable. Cash collection requires separate deposit and
+reconciliation controls. Device synchronisation feeds the concessionaire system before central reporting.
+
+Central outage and backlog recovery
+•    Keep collecting within the approved continuity policy and preserve the local outbox.
+•    Show Government that the national view is stale, with last received time by concessionaire.
+•    On recovery, throttle replay, prioritise recent critical events without losing backlog, and preserve business
+     ordering.
+•    Compare control totals and independent evidence; resolve missing and conflicting records through exception
+     cases.
+•    Remove local queue entries only under the agreed retention and acceptance policy; retain replay evidence.
+Reporting failures do not automatically reverse a payment. Any decision to restrict collection follows authorised
+operational procedures rather than a gateway timeout.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026        7
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+7 Reconciliation messaging and national reporting
+Independent financial reconciliation
+Match concessionaire reports against provider confirmation, provider settlement statements and destination bank or
+treasury records. A reported payment, a confirmed provider payment, a settled amount and a reconciled Government
+credit are separate states. National reports expose all four. Central reconciliation is authoritative only to the extent
+that evidence coverage and unresolved exceptions support it.
+Match using provider references, amount, currency, time window and allocation IDs. Settlement batches may
+combine many payments; store a batch-to-payment allocation. Compare gross collections, approved fees, refunds,
+chargebacks, timing differences and net credited funds. An unmatched difference is an exception until classified, not
+automatically fraud.
+
+Financial approvals and exceptions
+Assign each exception an owner, severity, evidence links, due date and status. Refund approval, bank-detail changes
+and reconciliation overrides use maker-checker approval and reason codes. Freeze original evidence. Corrections
+generate linked events, and closed accounting periods require controlled adjustment entries. Rules distinguish
+pending settlements from overdue ones using approved provider calendars.
+
+Shared messaging
+Concessionaires submit a business notification request with recipient reference, template version, language, channel,
+transaction reference and deduplication key. The central service applies approved sender identity, routing, consent or
+other authorised communication basis, rate limits and cost allocation. It records request, provider acceptance,
+delivery outcome and failure separately.
+An uncertain delivery result must not trigger uncontrolled cross-channel duplicates. Fallback policy defines timing,
+alternate channels and whether a message can be resent. Transactional and promotional communication have
+different controls. A local fallback gateway, if approved, reports its outcomes centrally and uses the same notification
+identity. USSD is normally a customer-initiated session; session integration is distinct from SMS or push delivery.
+
+National dashboards and measures
+Display assessments, confirmed collections, outstanding balances, settled funds, unresolved differences and
+collection efficiency by authority, period, concession and revenue type. Define numerator, denominator, exclusions
+and period for every KPI. Separate payment attempts from successful collections. Mark late or incomplete data;
+present receipt time and last completed reconciliation alongside totals.
+Auditors can trace a national figure through warehouse records to applied events and independent evidence. Receipt
+verification discloses only the fields necessary to establish authenticity. Automated anomaly rules raise review cases;
+they do not independently impose sanctions or authorise financial changes.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026       8
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+8 Security privacy and data governance
+Access and trust boundaries
+Government oversight, concessionaire operations, external financial feeds and platform administration are distinct
+trust zones. Enforce tenant and jurisdiction scope at the API, application and data layers. Concessionaire identifiers
+supplied by clients never override authenticated scope. Human roles separate national viewing, audit, operations,
+finance approval and technical administration.
+•    Use multi-factor authentication for privileged users, time-limited elevated access and documented emergency
+     access.
+•    Rotate client certificates and credentials, revoke compromised clients and keep secrets in managed storage.
+•    Encrypt network traffic, databases, archives and backups; document key ownership and recovery procedures.
+•    Protect ingress with quotas, request validation and application filtering. Test authorisation across tenants.
+•    Record sensitive exports, data changes and administrative actions with actor, time, scope and reason.
+
+Data minimisation and lawful access
+Approve a field-level sharing schedule before integration. The central oversight dataset should contain only the
+identity and contact data needed for authorised reporting, reconciliation and messaging. Keep contact details and
+identity mappings in restricted services. Use synthetic or irreversibly de-identified records for testing. Exclude card
+security codes, full payment credentials and unnecessary identity-document images from event payloads.
+Confirm data-controller and processor responsibilities, hosting locations, permitted transfers, retention periods,
+incident duties and access arrangements through the appropriate Government and legal review. This framework
+proposes technical controls; it does not determine the lawful basis or declare any particular hosting location legally
+sufficient.
+
+Records and citizen rights
+Data governance must distinguish Government records, personal data, concessionaire business information and
+software IP. Access to records follows the Government mandate and applicable agreements; holding data does not
+itself establish proprietary ownership. Provide approved correction, access and deletion processes with documented
+exceptions for required financial retention.
+An append-only archive protects audit integrity during an approved retention period. It is not a promise to retain all
+personal data indefinitely. Partition or tokenise personal fields so retention expiry and authorised deletion can be
+implemented without destroying the minimum financial evidence lawfully retained.
+
+Incident handling
+Maintain a common incident procedure with named contacts, detection and containment steps, evidence
+preservation, credential revocation and required notification routes. The central operator and affected concessionaire
+coordinate recovery, while Government retains oversight. Test data exposure, fraudulent client submissions and
+compromised field-device scenarios before production.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026        9
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+9 Service levels capacity and operational assurance
+The following are proposed starting targets. Government and the concessionaires must approve them after sizing,
+pilot results and a business-impact assessment. Measure central and local availability separately.
+
+Measure                        Proposed planning target          Measurement
+
+Central ingestion              99.9 percent per calendar month   Eligible minutes with durable receipt available; agreed
+availability                                                     exclusions explicit.
+
+Connected reporting            95 percent within 60 seconds      Local committed time to central durable receipt.
+delay
+
+Dashboard freshness            95 percent within 5 minutes       Central receipt to visible operational view.
+
+Offline backlog                Drain within 24 hours of stable   Subject to measured backlog and agreed replay
+                               recovery                          throughput.
+
+Central disaster recovery      RPO at most 5 minutes and RTO     All components tested; replay reconciles
+                               at most 4 hours                   acknowledged data gaps.
+
+Reconciliation                 Daily cycle after evidence        Coverage and exception ageing reported by provider.
+                               availability
+
+Critical incident              15 minutes under continuous       Measured from agreed alert or incident receipt.
+acknowledgement                support
+
+
+
+Sizing and data integrity
+Obtain transactions per day, peak events per second, events per payment, payload sizes, messaging volume, offline
+backlog, provider schedules and retention periods. Size for measured peaks and concurrent catch-up. Estimate
+archive growth from event count × mean payload size × retention, then add indexes, replication and backups. Load
+tests include partner isolation and reconciliation workload.
+A nonzero disaster-recovery RPO can lose recently acknowledged events. Partners must retain accepted outbox
+history for an agreed replay window and compare manifests after failover. An ingestion status that disappears after
+recovery triggers safe replay. If durable acceptance must survive without loss, specify and test an RPO of zero with an
+appropriate replication design and cost.
+
+Monitoring and operational evidence
+Monitor backlog depth, oldest pending event, rejection rate, duplicate conflicts, delayed predecessors, consumer lag,
+reporting completeness, provider-feed freshness and warehouse lag. Alerts have an owner and response playbook.
+Monitor certificate expiry, failed authentication, unusual exports and backup success alongside service performance.
+
+Recovery verification
+Test backup restoration, primary-region loss, database failure, broker recovery and corrupted projections. Rebuild
+derived views from retained events and verify financial totals. Recovery is complete only when service health, event
+completeness and financial reconciliation meet the agreed criteria. Messaging requires its own replay rules to prevent
+resending old notifications.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026           10
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+10 Governance ownership and concession transition
+Government and shared operator
+Government should approve the oversight standards, concession scope, reporting access, KPI definitions and audit
+policy. A designated Central Platform operator implements and supports those controls under an approved service
+agreement. The operator may be Government, an independent provider or an SPV; selection remains open.
+If concessionaires jointly own the operator, establish Government oversight, independent audit, conflict disclosure,
+access separation and a route for admitting future concessionaires on equivalent terms. Equity participation does not
+grant unrestricted access to competitors’ data or unilateral control over interoperability rules.
+
+Decision rights
+Decision                                                  Proposed approval route
+
+Concession scope and collecting authority                 Responsible Government authority.
+
+Common API and data contracts                             Technical committee recommends; Government oversight
+                                                          approves.
+
+Provider and settlement arrangements                      Authorised Government finance function and contract parties.
+
+Technical releases within approved design                 Central operator under controlled change management.
+
+Material cost sharing and operator ownership              Affected parties through written commercial agreement.
+
+Background IP licence or assignment                       Verified IP owner through an explicit signed agreement.
+
+Sensitive data access and national exports                Designated Government data owner under approved policy.
+
+
+
+Intellectual property and funding
+Maintain a Background IP register for each participant, including iDARMS where applicable, identifying owners,
+components, licences and third-party restrictions. Interface conformity does not require disclosure of local source
+code. Separate ownership of central code, central operating licences, Government usage rights, local applications and
+the public interoperability specification.
+Agree central development and operating costs separately from collection revenue shares. Allocate costs
+transparently using fixed participation, measured usage or another approved basis. Prevent central-service fees from
+being deducted from public collections without express authorisation. Government continuity rights, source access or
+escrow arrangements require explicit terms.
+
+Concession expiry or replacement
+Use effective-dated authority changes and identify who services outstanding assessments, refunds and disputes.
+Freeze new collection rights at the agreed cutover while permitting authorised historical reporting. Export agreed
+data and evidence to Government or an approved successor, rotate credentials and reconcile balances. Transfer of
+records does not automatically transfer proprietary software. Test transition through a rehearsal before expiry.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026               11
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+11 Implementation plan and acceptance criteria
+Stage                    Required outputs                                   Acceptance evidence
+
+1 Agreement and          Authority model, data schedule, volumes,           Government and partner approval of
+discovery                financial flows and ownership register             boundaries and unresolved decisions.
+
+2 Contracts and          Schemas, code lists, OpenAPI, event examples All partners can validate and authenticate
+sandbox                  and certification environment                sample submissions.
+
+3 Central                Gateway, durable event store, broker, scope        Security, replay, tenant isolation and
+foundation               registry, audit and operations                     restoration checks pass.
+
+4 Partner adapters       Local outbox, delivery worker, receipt             Each partner passes independent conformance
+                         tracking and control totals                        tests.
+
+5 Finance and            Provider and bank feeds, reconciliation,           End-to-end financial trace and message
+shared services          messaging and dashboards                           deduplication demonstrated.
+
+6 Controlled pilot       Limited live scope with parallel reconciliation    Totals match evidence; reporting and recovery
+                                                                            targets met.
+
+7 Phased rollout         Concession onboarding, support and                 Approved production readiness and staged
+                         transition procedures                              rollout sign-off.
+
+
+
+Mandatory integration tests
+•    Duplicate submission and lost acknowledgement cause one business effect.
+•    Different payloads using the same event identity are flagged without overwriting evidence.
+•    Out-of-order payment, receipt, reversal and refund events resolve consistently.
+•    A batch with mixed valid and invalid items returns individual results without silent losses.
+•    A concessionaire cannot read or submit records under another concessionaire’s identity.
+•    Offline replay and central failover restore completeness against control totals.
+•    Partial payments, multi-invoice allocations, fees and settlement batches reconcile correctly.
+•    Missing bank evidence, provider delay and unexplained differences appear as open exceptions.
+•    Message retry, fallback and callback replay do not create unauthorised duplicate notifications.
+•    Credential revocation, expired concessions and approved historical reporting behave as specified.
+
+Production readiness
+Before launch, approve runbooks, support contacts, monitoring, recovery evidence, penetration-test findings, privacy
+controls and Government access. Record defects, owners and acceptance decisions. A partner is certified for a
+specific schema and scope; material changes require targeted recertification. Dates and rollout volumes should be set
+after discovery rather than inferred from this framework.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026                12
+GOVERNMENT REVENUE MOBILISATION | PROPOSED FRAMEWORK
+
+
+
+
+12 Decisions and detailed design deliverables
+Decisions for the next joint meeting
+•     Confirm the collecting entities, concession boundaries and responsible Government authority.
+•     Approve the separation of local operations, central oversight and independent financial evidence.
+•     Select the central operating and ownership model, including conflict safeguards.
+•     Agree mandatory reporting fields, event families and financial state definitions.
+•     Confirm whether messaging is mandatory centrally or permits audited local fallback.
+•     Approve settlement mandates, evidence access, fee treatment and exception ownership.
+•     Set hosting, data access, retention and identity integration policies.
+•     Assign funding, delivery responsibilities, pilot participants and acceptance approvers.
+
+Deliverables after approval
+The detailed design should produce a system context and deployment diagram; OpenAPI files; JSON event schemas;
+event and code-list registries; example requests and responses; data-sharing and retention schedules; concession
+scope rules; authentication profiles; reconciliation rules; financial allocation models; messaging templates and
+fallback rules; sizing and service-level schedules; recovery runbooks; partner certification scripts; and a responsibility
+matrix with named owners.
+
+Illustrative payment reporting record
+Example only. IDs and code values are fictitious; actual values come from the approved registries. The payment
+reference identifies the business payment, while the event ID identifies this particular statement about it. Amounts
+are integer minor units, so 125000 represents GHS 1,250.00.
+{
+    "specversion": "1.0",
+    "id": "evt-A-000018", "source": "urn:concessionaire:A",
+    "type": "revenue.payment.confirmed.v1",
+    "time": "2026-10-08T13:30:00Z",
+    "subject": "payment/pay-A-000041",
+    "datacontenttype": "application/json",
+    "dataschema": "urn:revenue:schema:payment-confirmed:1",
+    "data": {
+      "concessionaireId": "A", "concessionId": "CN-001",
+      "authorityCode": "AUTH-01", "jurisdictionCode": "J-01",
+      "revenueCode": "REV-01", "paymentId": "pay-A-000041",
+      "accountRef": "acct-A-008", "currency": "GHS",
+      "grossMinor": 125000, "providerRef": "PSP-739",
+      "providerId": "PSP-01", "aggregateVersion": 2,
+      "allocations": [{"invoiceId": "inv-A-021", "minor": 125000}]
+    }
+}
+
+
+Technical references
+[1] OpenAPI Initiative specification index — https://spec.openapis.org/
+[2] CloudEvents specification — https://github.com/cloudevents/spec/blob/main/cloudevents/spec.md
+[3] IETF RFC 9700 OAuth 2.0 Security Best Current Practice — https://www.rfc-editor.org/rfc/rfc9700.html
+These references support contract and security conventions. The architecture, governance model and numerical
+targets above are proposals for this project, not requirements asserted by those standards.
+
+
+
+
+Draft for consortium and Government review • 8 October 2026         13
+

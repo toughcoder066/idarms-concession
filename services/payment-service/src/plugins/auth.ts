@@ -1,20 +1,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config } from '../config';
+import { resolveOrgContext } from '../lib/org-context';
+import { capabilitiesForRoles, parseRoleGrants } from '../lib/roles';
 import type { AuthContext } from '../types/global';
 
 function parseRoles(payload: Record<string, unknown>): string[] {
-  const roles = new Set<string>();
-  for (const [key, value] of Object.entries(payload)) {
-    if (key.startsWith('urn:zitadel:iam:org:project') && key.endsWith(':roles')) {
-      if (value && typeof value === 'object') {
-        for (const role of Object.keys(value as Record<string, unknown>)) {
-          roles.add(role);
-        }
-      }
-    }
-  }
-  return [...roles];
+  return [...new Set(parseRoleGrants(payload).map((grant) => grant.role))];
 }
 
 function parsePermissions(value: unknown): string[] {
@@ -91,19 +83,31 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
           audience: config.zitadelAudience,
         });
 
-        const context = (payload['urn:idarms:context'] ?? {}) as {
-          concessionId?: string;
-          assemblyId?: string;
-        };
-
         const roles = parseRoles(payload);
-        const permissions = parsePermissions(payload['urn:idarms:permissions']);
+        const roleGrants = parseRoleGrants(payload);
+        const permissions = [
+          ...new Set([
+            ...capabilitiesForRoles(roles),
+            ...parsePermissions(payload['urn:idarms:permissions']),
+          ]),
+        ];
+        const homeOrgId = typeof payload['urn:zitadel:iam:user:resourceowner:id'] === 'string'
+          ? payload['urn:zitadel:iam:user:resourceowner:id']
+          : undefined;
+        const authorizedOrgIds = roleGrants.length > 0
+          ? [...new Set(roleGrants.map((grant) => grant.orgId))]
+          : homeOrgId ? [homeOrgId] : [];
+        const context = homeOrgId ? await resolveOrgContext(homeOrgId) : null;
         request.auth = {
           subject: typeof payload.sub === 'string' ? payload.sub : '',
           roles,
-          permissions: permissions.length > 0 ? permissions : roles,
-          concessionId: context.concessionId,
-          assemblyId: context.assemblyId,
+          permissions,
+          roleGrants,
+          homeOrgId,
+          authorizedOrgIds,
+          concessionId: context?.concessionId,
+          assemblyId: context?.assemblyId ?? undefined,
+          scopeLevel: context?.scope,
         };
       } catch {
         return reply.code(401).send({ error: 'unauthorized', message: 'Invalid or expired token' });

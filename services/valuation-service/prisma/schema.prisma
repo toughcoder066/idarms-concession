@@ -80,22 +80,32 @@ model IdempotencyRecord {
 
 // ============================ Domain models ============================
 model PropertyReplica {
-  id           String @id @db.Uuid
-  assemblyId   String @db.Uuid
-  propertyType String
-  status       String
+  id            String   @id @db.Uuid
+  concessionId  String   @db.Uuid @map("concession_id")
+  assemblyId    String   @db.Uuid @map("assembly_id")
+  propertyType  String   @map("property_type")
+  propertyUsage String   @default("GENERAL") @map("property_usage")
+  status        String
+  lastSyncedAt  DateTime @default(now()) @map("last_synced_at")
 
+  @@index([concessionId, assemblyId, status])
   @@map("property_replicas")
 }
 
 model Valuation {
-  id           String   @id @default(uuid()) @db.Uuid
-  propertyId   String   @unique @db.Uuid
-  assemblyId   String   @db.Uuid
-  marketValue  Decimal  @db.Decimal(12, 2)
-  taxableValue Decimal  @db.Decimal(12, 2)
-  fiscalYear   Int
-  createdAt    DateTime @default(now())
+  id            String   @id @default(uuid()) @db.Uuid
+  concessionId  String   @db.Uuid @map("concession_id")
+  assemblyId    String   @db.Uuid @map("assembly_id")
+  propertyId    String   @unique @db.Uuid @map("property_id")
+  propertyType  String   @map("property_type")
+  propertyUsage String   @default("GENERAL") @map("property_usage")
+  marketValue   Decimal  @db.Decimal(14, 2) @map("market_value")
+  taxableValue  Decimal  @db.Decimal(14, 2) @map("taxable_value")
+  fiscalYear    Int      @map("fiscal_year")
+  basis         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
+  @@index([concessionId, assemblyId, fiscalYear])
   @@map("valuations")
 }

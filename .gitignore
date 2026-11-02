@@ -30,6 +30,10 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
+# Production audit credentials — never commit
+.secrets/
+zitadel-prod-audit*.json
+
 # Docker data
 infra/docker/data/
 

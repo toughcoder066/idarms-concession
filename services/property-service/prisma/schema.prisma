@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================ Standard cross-cutting models ============================
+// Every iDARMS service carries these four models for reliable messaging and auditability.
+
+model OutboxEvent {
+  id               String    @id @default(uuid()) @db.Uuid
+  eventType        String
+  eventVersion     Int       @default(1)
+  aggregateType    String
+  aggregateId      String
+  aggregateVersion Int
+  routingKey       String
+  payload          Json
+  headers          Json
+  occurredAt       DateTime  @default(now())
+  publishedAt      DateTime?
+  attempts         Int       @default(0)
+  nextAttemptAt    DateTime  @default(now())
+  lockedAt         DateTime?
+  lastError        String?
+
+  @@index([publishedAt, nextAttemptAt, occurredAt])
+  @@map("outbox_events")
+}
+
+model InboxMessage {
+  id          String    @id @default(uuid()) @db.Uuid
+  consumerId  String
+  messageId   String    @db.Uuid
+  eventType   String
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  result      Json?
+
+  @@unique([consumerId, messageId])
+  @@map("inbox_messages")
+}
+
+model AuditRecord {
+  id           String   @id @default(uuid()) @db.Uuid
+  occurredAt   DateTime @default(now())
+  actorId      String
+  actorType    String
+  concessionId String?  @db.Uuid
+  assemblyId   String?  @db.Uuid
+  action       String
+  resourceType String
+  resourceId   String?
+  requestId    String
+  sourceIp     String?
+  outcome      String
+  metadata     Json
+
+  @@index([concessionId, assemblyId, occurredAt])
+  @@map("audit_records")
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  concessionId   String   @db.Uuid
+  idempotencyKey String
+  requestHash    String
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([concessionId, idempotencyKey])
+  @@map("idempotency_records")
+}
+
+// ============================ Domain models ============================
+model Property {
+  id                 String             @id @db.Uuid
+  croipPropertyId    String?            @unique @map("croip_property_id") @db.Uuid
+  externalPropertyId String             @map("external_property_id")
+
+  concessionId       String             @map("concession_id") @db.Uuid
+  assemblyId         String             @map("assembly_id") @db.Uuid
+  ratepayerRef       String?            @map("ratepayer_ref") @db.Uuid
+
+  digitalAddress     String?            @map("digital_address") @db.VarChar(15)
+  zoneCode           String?            @map("zone_code")
+  blockCode          String?            @map("block_code")
+  addressText        String?            @map("address_text")
+  latitude           Float?             @db.DoublePrecision
+  longitude          Float?             @db.DoublePrecision
+
+  propertyType       PropertyType       @default(UNCLASSIFIED) @map("property_type")
+  propertyUsage      PropertyUsage      @default(GENERAL) @map("property_usage")
+  ratableValue       Decimal?           @default(0.00) @map("ratable_value") @db.Decimal(14, 2)
+
+  status             PropertyStatus     @default(SUBMITTED)
+  registrationSource RegistrationSource @default(MOBILE_FIELD_APP) @map("registration_source")
+  isBillGenerated    Boolean            @default(false) @map("is_bill_generated")
+
+  documentIds        String[]           @default([]) @map("document_ids")
+
+  registeredBy       String             @map("registered_by") @db.Uuid
+  verifiedBy         String?            @map("verified_by") @db.Uuid
+  verifiedAt         DateTime?          @map("verified_at")
+
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  lastSyncedAt       DateTime?          @map("last_synced_at")
+  version            Int                @default(1)
+
+  verifications      FieldVerification[]
+
+  @@unique([concessionId, externalPropertyId])
+  @@index([concessionId, assemblyId, status])
+  @@index([concessionId, assemblyId, propertyType])
+  @@index([digitalAddress])
+  @@index([ratepayerRef])
+  @@index([zoneCode, blockCode])
+  @@map("properties")
+}
+
+model FieldVerification {
+  id              String            @id @default(uuid()) @db.Uuid
+  propertyId      String            @map("property_id") @db.Uuid
+  agentId         String            @map("agent_id") @db.Uuid
+  status          VerificationState
+  notes           String?           @db.Text
+  photoDocumentId String?           @map("photo_document_id") @db.Uuid
+  verifiedAt      DateTime          @default(now()) @map("verified_at")
+  property        Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@map("field_verifications")
+}
+
+enum PropertyType {
+  UNCLASSIFIED
+  RESIDENTIAL
+  COMMERCIAL
+  INDUSTRIAL
+  MIXED_USE
+  GOVERNMENTAL
+  AGRICULTURAL
+}
+
+enum PropertyUsage {
+  GENERAL
+  SHOP
+  OFFICE
+  APARTMENT
+  SINGLE_FAMILY_HOUSE
+  WAREHOUSE
+  FACTORY
+  HOTEL_LODGING
+  EDUCATIONAL
+  FILLING_STATION
+}
+
+enum PropertyStatus {
+  SUBMITTED
+  VERIFIED
+  DISPUTED
+  ARCHIVED
+}
+
+enum RegistrationSource {
+  WALK_IN_DESK
+  MOBILE_FIELD_APP
+  BULK_IMPORT
+  CROIP_SYNC
+}
+
+enum VerificationState {
+  APPROVED
+  REJECTED
+  NEEDS_CORRECTION
+}

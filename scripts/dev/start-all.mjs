@@ -9,9 +9,23 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const logDir = join(root, '.dev-logs');
 const pidFile = join(root, '.dev-pids.json');
 
+const databases = [
+  'idarms_ratepayer_db',
+  'idarms_property_db',
+  'idarms_document_db',
+  'idarms_valuation_db',
+  'idarms_billing_db',
+  'idarms_payment_db',
+  'idarms_reconciliation_db',
+  'idarms_reporting_db',
+  'idarms_integration_db',
+  'concession_mgmt_db',
+  'gis_spatial_db',
+];
+
 const servers = [
   ['ratepayer-service', 3020],
-  ['property-registry-service', 3010],
+  ['property-service', 3010],
   ['documents-service', 3050],
   ['valuation-service', 3060],
   ['billing-service', 3030],
@@ -19,9 +33,12 @@ const servers = [
   ['reconciliation-service', 3070],
   ['reporting-service', 3080],
   ['croip-integration-service', 3090],
-];const workers = {
+  ['concessions-management-service', 3100],
+  ['gis-service', 3110],
+];
+const workers = {
   'ratepayer-service': ['inbox-worker'],
-  'property-registry-service': ['inbox-worker', 'outbox-worker'],
+  'property-service': ['inbox-worker', 'outbox-worker'],
   'documents-service': ['inbox-worker', 'outbox-worker'],
   'valuation-service': ['inbox-worker', 'outbox-worker'],
   'billing-service': ['inbox-worker', 'outbox-worker'],
@@ -29,6 +46,8 @@ const servers = [
   'reconciliation-service': ['inbox-worker', 'outbox-worker'],
   'reporting-service': ['inbox-worker', 'outbox-worker'],
   'croip-integration-service': ['downstream-worker', 'upstream-worker', 'outbox-worker'],
+  'concessions-management-service': ['inbox-worker', 'outbox-worker'],
+  'gis-service': ['inbox-worker', 'outbox-worker'],
 };
 
 const entries = [];
@@ -83,6 +102,28 @@ for (let i = 0; i < 40; i += 1) {
   await new Promise((resolve) => setTimeout(resolve, 1000));
 }
 console.log(healthy ? ' ok' : ' (continuing, check `pnpm db:logs`)');
+
+if (healthy) {
+  for (const database of databases) {
+    try {
+      const existing = execFileSync(
+        'docker',
+        ['exec', 'idarms-postgres', 'psql', '-U', 'idarms', '-d', 'idarms', '-tAc',
+          `SELECT 1 FROM pg_database WHERE datname = '${database}'`],
+        { encoding: 'utf8' },
+      ).trim();
+      if (!existing) {
+        execFileSync('docker', [
+          'exec', 'idarms-postgres', 'psql', '-U', 'idarms', '-d', 'idarms',
+          '-c', `CREATE DATABASE ${database}`,
+        ]);
+        console.log(`  + database ${database}`);
+      }
+    } catch (error) {
+      console.warn(`  ! could not ensure database ${database}: ${error.message}`);
+    }
+  }
+}
 
 mkdirSync(logDir, { recursive: true });
 const started = [];

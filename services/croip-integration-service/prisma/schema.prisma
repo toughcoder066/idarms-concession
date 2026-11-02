@@ -81,13 +81,14 @@ model IdempotencyRecord {
 // ============================ Domain models ============================
 model SyncRecord {
   id             String   @id @default(uuid()) @db.Uuid
-  entityType     String   // PROPERTY, PAYMENT, RATEPAYER
+  entityType     String   // PROPERTY, RATEPAYER, BILL, PAYMENT, CONCESSION
   entityId       String   @db.Uuid
   direction      String   // UPSTREAM, DOWNSTREAM
-  status         String   // SYNCED, FAILED
+  status         String   // SYNCED, PENDING, FAILED
   croipReference String?
   lastSyncedAt   DateTime @default(now())
 
   @@unique([entityType, entityId, direction])
+  @@index([entityType, direction, status])
   @@map("sync_records")
 }

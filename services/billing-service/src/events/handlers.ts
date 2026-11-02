@@ -1,6 +1,7 @@
 import type { Prisma } from '../../generated/prisma';
 import type { EventEnvelope } from '../messaging/events';
 import { handleValuationCompleted } from './billing.handler';
+import { handleFeeFixingPublished } from './fee-fixing.handler';
 
 export type EventHandler = (tx: Prisma.TransactionClient, event: EventEnvelope) => Promise<unknown>;
 
@@ -11,5 +12,6 @@ export type EventHandler = (tx: Prisma.TransactionClient, event: EventEnvelope) 
 export function registerEventHandlers(): Map<string, EventHandler> {
   return new Map<string, EventHandler>([
     ['property.valuation_completed.v1', handleValuationCompleted],
+    ['fee_fixing.published.v1', handleFeeFixingPublished],
   ]);
 }

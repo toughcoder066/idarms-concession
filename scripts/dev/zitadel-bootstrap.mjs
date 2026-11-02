@@ -1,38 +1,41 @@
 // Config-as-code bootstrap for the local iDARMS ZITADEL instance.
-// Creates the iDARMS project, API + web apps, roles, human users, user metadata
-// (concessionId/assemblyId), user grants, and a token-customization action that
-// injects the urn:idarms:context claim into access tokens.
+// Creates the iDARMS project, API + web apps, the canonical human/machine
+// project roles, human users, and user grants. It also retires the obsolete
+// flat permission roles and the legacy idarmsContext token action.
+//
+// The role/capability model lives in packages/contracts/src/roles.ts. This
+// script reads the compiled model so the bootstrap and application code cannot
+// drift apart.
 //
 // Prereqs: the ZITADEL stack is up (pnpm zitadel:up). Run: pnpm zitadel:bootstrap
 
 import { execSync } from 'node:child_process';
 import { createSign } from 'node:crypto';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { ROLE_DEFINITIONS, PROJECT_ROLE_KEYS } = require('../../packages/contracts/dist/roles.js');
 
 const BASE = process.env.ZITADEL_URL ?? 'http://localhost:8080';
 const PROJECT_NAME = 'iDARMS';
-
-const ROLES = [
-  'ratepayer:read',
-  'property:read',
-  'property:create',
-  'property:verify',
-  'property:update',
-  'document:read',
-  'document:upload',
-  'valuation:read',
-  'valuation:calculate',
-  'bill:read',
-  'bill:generate',
-  'payment:read',
-  'payment:checkout',
-  'reconciliation:read',
-  'reconciliation:reconcile',
-  'reporting:read',
-  'integration:sync',
-];
-
-const DEV_CONCESSION_ID = '11111111-1111-1111-1111-111111111111';
-const DEV_ASSEMBLY_ID = '22222222-2222-2222-2222-222222222222';
+const MACHINE_USER_ROLE = 'CROIP_M2M';
+const PORTAL_URLS = [...new Set([
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  process.env.PORTAL_URL,
+].filter(Boolean))];
+const POST_LOGOUT_REDIRECT_URIS = PORTAL_URLS.map((url) => new URL('/signed-out', url).toString());
+const LOGIN_BRANDING = {
+  primaryColor: '#0f766e',
+  warnColor: '#d85b63',
+  backgroundColor: '#f5f7fb',
+  fontColor: '#172033',
+  primaryColorDark: '#14b8a6',
+  warnColorDark: '#f87171',
+  backgroundColorDark: '#101827',
+  fontColorDark: '#f8fafc',
+  themeMode: 'THEME_MODE_AUTO',
+};
 
 const USERS = [
   {
@@ -40,35 +43,16 @@ const USERS = [
     givenName: 'Concession',
     familyName: 'Admin',
     email: 'concession-admin@idarms.local',
-    roles: ROLES,
+    roles: ['CONCESSION_SUPER_ADMIN'],
   },
   {
     userName: 'field-agent',
     givenName: 'Field',
     familyName: 'Agent',
     email: 'field-agent@idarms.local',
-    roles: ['property:read', 'property:verify', 'ratepayer:read', 'document:read'],
+    roles: ['FIELD_AGENT'],
   },
 ];
-
-const CONTEXT_ACTION_SCRIPT = [
-  'function idarmsContext(ctx, api) {',
-  '  const md = ctx.v1.user.getMetadata();',
-  '  const entries = (md && md.metadata) || [];',
-  '  const get = (key) => {',
-  '    const found = entries.find((entry) => entry.key === key);',
-  '    return found ? found.value : undefined;',
-  '  };',
-  '  const concessionId = get(\'concessionId\');',
-  '  const assemblyId = get(\'assemblyId\');',
-  '  if (concessionId && assemblyId) {',
-  "    api.v1.claims.setClaim('urn:idarms:context', {",
-  '      concessionId: concessionId,',
-  '      assemblyId: assemblyId,',
-  '    });',
-  '  }',
-  '}',
-].join('\n');
 
 function readMachineKey() {
   // The API container is distroless (no `cat`); read the bootstrap volume with a
@@ -158,6 +142,50 @@ const listRoles = makeList('/management/v1/projects/{project_id}/roles/_search')
 const listApps = makeList('/management/v1/projects/{project_id}/apps/_search');
 const listUsers = makeList('/management/v1/users/_search');
 const listActions = makeList('/management/v1/actions/_search');
+const listGrants = makeList('/management/v1/users/grants/_search');
+
+async function syncLoginBranding(token, orgId) {
+  const current = await api(token, 'GET', '/management/v1/policies/label', undefined, orgId);
+  const policy = current?.policy;
+  const hasCustomPolicy = policy && !policy.isDefault;
+  const changed = Object.entries(LOGIN_BRANDING).some(([key, value]) => policy?.[key] !== value);
+  if (hasCustomPolicy && !changed) {
+    console.log('  iDARMS login colors are already active');
+    return;
+  }
+
+  await api(token, hasCustomPolicy ? 'PUT' : 'POST', '/management/v1/policies/label', LOGIN_BRANDING, orgId);
+  await api(token, 'POST', '/management/v1/policies/label/_activate', {}, orgId);
+  console.log('  applied iDARMS login colors to the organization');
+}
+
+async function syncUserGrant(token, userId, projectId, roleKeys, orgId) {
+  const grants = await listGrants(token, null, orgId);
+  const existing = grants.find((grant) => grant.userId === userId && grant.projectId === projectId);
+  const next = [...roleKeys].sort();
+
+  if (!existing) {
+    if (next.length === 0) return;
+    await api(token, 'POST', `/management/v1/users/${userId}/grants`, {
+      userId,
+      projectId,
+      roleKeys: next,
+    }, orgId);
+    return;
+  }
+
+  const current = [...(existing.roleKeys ?? [])].sort();
+  if (JSON.stringify(current) === JSON.stringify(next)) return;
+
+  if (next.length === 0) {
+    await api(token, 'DELETE', `/management/v1/users/${userId}/grants/${existing.id}`, undefined, orgId);
+    return;
+  }
+
+  await api(token, 'PUT', `/management/v1/users/${userId}/grants/${existing.id}`, {
+    roleKeys: next,
+  }, orgId);
+}
 
 async function main() {
   console.log('Reading first-instance admin machine key…');
@@ -171,7 +199,13 @@ async function main() {
   console.log('\n0. Org');
   const myOrg = await api(token, 'GET', '/management/v1/orgs/me');
   const orgId = myOrg?.org?.id;
+  if (typeof orgId !== 'string' || !orgId) {
+    throw new Error('ZITADEL did not return the organization ID required to configure login branding.');
+  }
   console.log(`  org id: ${orgId}`);
+
+  console.log('\n0.1 Login branding');
+  await syncLoginBranding(token, orgId);
 
   console.log('\n1. Project');
   let project = (await listProjects(token)).find((p) => p.name === PROJECT_NAME);
@@ -182,12 +216,14 @@ async function main() {
     await api(token, 'PUT', `/management/v1/projects/${project.id}`, {
       name: PROJECT_NAME,
       projectRoleAssertion: true,
+      privateLabelingSetting: 'PRIVATE_LABELING_SETTING_ENFORCE_PROJECT_RESOURCE_OWNER_POLICY',
     });
-    console.log('  enabled project role assertion');
+    console.log('  enabled project role assertion and enforced organization branding');
   } else {
     project = await api(token, 'POST', '/management/v1/projects', {
       name: PROJECT_NAME,
       projectRoleAssertion: true,
+      privateLabelingSetting: 'PRIVATE_LABELING_SETTING_ENFORCE_PROJECT_RESOURCE_OWNER_POLICY',
     });
     console.log(`  created project ${project.id}`);
   }
@@ -221,7 +257,7 @@ async function main() {
         'http://localhost:3000/api/auth/callback/zitadel',
         'http://127.0.0.1:3000/api/auth/callback/zitadel',
       ],
-      postLogoutRedirectUris: ['http://localhost:3000'],
+      postLogoutRedirectUris: POST_LOGOUT_REDIRECT_URIS,
       version: 'OIDC_VERSION_1_0',
       accessTokenType: 'OIDC_TOKEN_TYPE_JWT',
       accessTokenRoleAssertion: true,
@@ -236,20 +272,67 @@ async function main() {
     console.log(`  existing web app ${webApp.id} (client ${webApp.clientId ?? '?'})`);
   }
 
-  console.log('\n3. Roles');
-  const existingRoleKeys = new Set((await listRoles(token, projectId)).map((r) => r.key));
-  for (const role of ROLES) {
-    if (existingRoleKeys.has(role)) continue;
-    await api(token, 'POST', `/management/v1/projects/${projectId}/roles`, {
-      roleKey: role,
-      displayName: role,
-      group: 'iDARMS',
-    });
-    console.log(`  created role ${role}`);
+  const oidcConfig = (await listApps(token, projectId))
+    .find((app) => app.id === webApp.id)?.oidcConfig;
+  if (oidcConfig) {
+    const postLogoutRedirectUris = [...new Set([
+      ...(oidcConfig.postLogoutRedirectUris ?? []),
+      ...POST_LOGOUT_REDIRECT_URIS,
+    ])];
+    if (postLogoutRedirectUris.length !== (oidcConfig.postLogoutRedirectUris ?? []).length) {
+      await api(token, 'PUT', `/management/v1/projects/${projectId}/apps/${webApp.id}/oidc_config`, {
+        projectId,
+        appId: webApp.id,
+        redirectUris: oidcConfig.redirectUris ?? [
+          'http://localhost:3000/api/auth/callback/zitadel',
+          'http://127.0.0.1:3000/api/auth/callback/zitadel',
+        ],
+        responseTypes: oidcConfig.responseTypes ?? ['OIDC_RESPONSE_TYPE_CODE'],
+        grantTypes: oidcConfig.grantTypes ?? [
+          'OIDC_GRANT_TYPE_AUTHORIZATION_CODE',
+          'OIDC_GRANT_TYPE_REFRESH_TOKEN',
+        ],
+        appType: oidcConfig.appType ?? 'OIDC_APP_TYPE_WEB',
+        authMethodType: oidcConfig.authMethodType ?? 'OIDC_AUTH_METHOD_TYPE_BASIC',
+        postLogoutRedirectUris,
+        devMode: oidcConfig.devMode ?? true,
+        accessTokenType: oidcConfig.accessTokenType ?? 'OIDC_TOKEN_TYPE_JWT',
+        accessTokenRoleAssertion: oidcConfig.accessTokenRoleAssertion ?? true,
+        idTokenRoleAssertion: oidcConfig.idTokenRoleAssertion ?? true,
+        idTokenUserinfoAssertion: oidcConfig.idTokenUserinfoAssertion ?? false,
+        clockSkew: oidcConfig.clockSkew ?? '0s',
+      });
+      console.log('  registered portal signed-out page for ZITADEL logout');
+    } else {
+      console.log('  portal signed-out page is already registered for ZITADEL logout');
+    }
+  } else {
+    throw new Error(`ZITADEL did not return OIDC configuration for portal app ${webApp.id}`);
   }
-  console.log(`  ${ROLES.length} roles present`);
 
-  console.log('\n4. Users, metadata and grants');
+  console.log('\n3. Canonical roles');
+  const existingRoles = await listRoles(token, projectId);
+  const existingRoleKeys = new Set(existingRoles.map((role) => role.key));
+  for (const definition of ROLE_DEFINITIONS) {
+    if (!existingRoleKeys.has(definition.key)) {
+      await api(token, 'POST', `/management/v1/projects/${projectId}/roles`, {
+        roleKey: definition.key,
+        displayName: definition.displayName,
+        group: definition.group,
+      });
+      console.log(`  created role ${definition.key}`);
+    } else {
+      await api(token, 'PUT', `/management/v1/projects/${projectId}/roles/${encodeURIComponent(definition.key)}`, {
+        roleKey: definition.key,
+        displayName: definition.displayName,
+        group: definition.group,
+      });
+      console.log(`  updated role ${definition.key}`);
+    }
+  }
+  console.log(`  ${ROLE_DEFINITIONS.length} canonical roles present`);
+
+  console.log('\n4. Users and grants');
   const existingUsers = await listUsers(token);
   const usersByLogin = new Map(existingUsers.map((u) => [u.userName, u]));
   for (const spec of USERS) {
@@ -274,60 +357,36 @@ async function main() {
     }
     const userId = user.userId ?? user.id;
 
-    await api(token, 'POST', `/management/v1/users/${userId}/metadata/concessionId`, {
-      value: b64url(DEV_CONCESSION_ID),
-    });
-    await api(token, 'POST', `/management/v1/users/${userId}/metadata/assemblyId`, {
-      value: b64url(DEV_ASSEMBLY_ID),
-    });
-    console.log(`  set concession/assembly metadata for ${spec.userName}`);
-
-    if (spec.roles.length > 0) {
+    for (const key of ['concessionId', 'assemblyId', 'scope_level', 'assembly_ids']) {
       try {
-        await api(token, 'POST', `/management/v1/users/${userId}/grants`, {
-          userId,
-          projectId,
-          roleKeys: spec.roles,
-        });
-        console.log(`  granted ${spec.roles.length} roles to ${spec.userName}`);
-      } catch (err) {
-        if (String(err.message).includes('409')) {
-          console.log(`  grant for ${spec.userName} already present`);
-        } else {
-          throw err;
-        }
+        await api(token, 'DELETE', `/management/v1/users/${userId}/metadata/${key}`, undefined, orgId);
+      } catch {
+        // Metadata may not exist on a fresh user.
       }
     }
+    console.log(`  removed legacy tenancy metadata for ${spec.userName}`);
+
+    await syncUserGrant(token, userId, projectId, spec.roles, orgId);
+    console.log(`  synced grant for ${spec.userName}: ${spec.roles.join(', ') || '(none)'}`);
   }
 
-  console.log('\n5. Token action (urn:idarms:context)');
-  let action = (await listActions(token, null, orgId)).find((a) => a.name === 'idarmsContext');
-  if (!action) {
-    action = await api(token, 'POST', '/management/v1/actions', {
-      name: 'idarmsContext',
-      script: CONTEXT_ACTION_SCRIPT,
-      timeout: '10s',
-      allowedToFail: false,
-    }, orgId);
-    console.log(`  created action ${action.id}`);
-  } else {
-    await api(token, 'PUT', `/management/v1/actions/${action.id}`, {
-      name: 'idarmsContext',
-      script: CONTEXT_ACTION_SCRIPT,
-      timeout: '10s',
-      allowedToFail: false,
-    }, orgId);
-    console.log(`  existing action ${action.id} (script refreshed)`);
-  }
-  try {
-    await api(token, 'POST', '/management/v1/flows/2/trigger/5', { actionIds: [action.id] }, orgId);
-    console.log('  bound action to Complement Token / Pre Access Token Creation');
-  } catch (err) {
-    if (String(err.message).includes('No Changes') || String(err.message).includes('"code":9')) {
-      console.log('  action already bound to Complement Token / Pre Access Token Creation');
-    } else {
-      throw err;
+  console.log('\n5. Remove legacy idarmsContext action');
+  const legacyAction = (await listActions(token, null, orgId)).find((a) => a.name === 'idarmsContext');
+  if (legacyAction) {
+    try {
+      await api(token, 'POST', '/management/v1/flows/2/trigger/5', { actionIds: [] }, orgId);
+      console.log('  cleared idarmsContext flow binding');
+    } catch (err) {
+      console.log(`  could not clear flow binding: ${err.message}`);
     }
+    try {
+      await api(token, 'DELETE', `/management/v1/actions/${legacyAction.id}`, undefined, orgId);
+      console.log(`  deleted action ${legacyAction.id}`);
+    } catch (err) {
+      console.log(`  could not delete action ${legacyAction.id}: ${err.message}`);
+    }
+  } else {
+    console.log('  no legacy action present');
   }
 
   console.log('\n6. M2M machine user (CROIP-issued credentials stand-in)');
@@ -348,24 +407,61 @@ async function main() {
   }
   const m2mUserId = m2mUser.userId ?? m2mUser.id;
 
-  // Give the machine user the same tenancy context + a read role so an
-  // end-to-end authenticated service call can be tested without a browser.
-  await api(token, 'POST', `/management/v1/users/${m2mUserId}/metadata/concessionId`, {
-    value: b64url(DEV_CONCESSION_ID),
-  });
-  await api(token, 'POST', `/management/v1/users/${m2mUserId}/metadata/assemblyId`, {
-    value: b64url(DEV_ASSEMBLY_ID),
-  });
-  try {
-    await api(token, 'POST', `/management/v1/users/${m2mUserId}/grants`, {
-      userId: m2mUserId,
-      projectId,
-      roleKeys: ['ratepayer:read', 'property:read'],
-    });
-    console.log('  granted ratepayer:read + property:read to croip-m2m');
-  } catch (err) {
-    if (String(err.message).includes('409')) console.log('  croip-m2m roles already granted');
-    else throw err;
+  for (const key of ['concessionId', 'assemblyId', 'scope_level', 'assembly_ids']) {
+    try {
+      await api(token, 'DELETE', `/management/v1/users/${m2mUserId}/metadata/${key}`, undefined, orgId);
+    } catch {
+      // Metadata may not exist on a fresh machine user.
+    }
+  }
+  await syncUserGrant(token, m2mUserId, projectId, [MACHINE_USER_ROLE], orgId);
+  console.log(`  synced grant for croip-m2m: ${MACHINE_USER_ROLE}`);
+
+  console.log('\n7. Retire obsolete roles');
+  const grants = await listGrants(token, null, orgId);
+  for (const grant of grants) {
+    if (grant.projectId !== projectId) continue;
+    const filtered = (grant.roleKeys ?? []).filter((key) => PROJECT_ROLE_KEYS.includes(key));
+    if (filtered.length === (grant.roleKeys ?? []).length) continue;
+    if (filtered.length === 0) {
+      await api(token, 'DELETE', `/management/v1/users/${grant.userId}/grants/${grant.id}`, undefined, orgId);
+      console.log(`  removed obsolete grant from ${grant.userName ?? grant.userId}`);
+    } else {
+      await api(token, 'PUT', `/management/v1/users/${grant.userId}/grants/${grant.id}`, {
+        roleKeys: filtered,
+      }, orgId);
+      console.log(`  filtered obsolete roles from ${grant.userName ?? grant.userId}`);
+    }
+  }
+
+  const currentRoles = await listRoles(token, projectId);
+  const obsoleteRoles = currentRoles.filter((role) => !PROJECT_ROLE_KEYS.includes(role.key));
+  for (const role of obsoleteRoles) {
+    try {
+      await api(token, 'DELETE', `/management/v1/projects/${projectId}/roles/${encodeURIComponent(role.key)}`, undefined, orgId);
+      console.log(`  deleted obsolete role ${role.key}`);
+    } catch (err) {
+      console.log(`  could not delete obsolete role ${role.key}: ${err.message}`);
+    }
+  }
+  const finalRoles = await listRoles(token, projectId);
+  console.log(`  final role count: ${finalRoles.length}`);
+
+  console.log('\n8. OIDC token lifetimes');
+  const currentOidc = await api(token, 'GET', '/admin/v1/settings/oidc');
+  const oidc = currentOidc?.settings ?? {};
+  const desiredOidc = {
+    accessTokenLifetime: '300s',
+    idTokenLifetime: oidc.idTokenLifetime ?? '43200s',
+    refreshTokenIdleExpiration: oidc.refreshTokenIdleExpiration ?? '2592000s',
+    refreshTokenExpiration: oidc.refreshTokenExpiration ?? '7776000s',
+  };
+  const oidcChanged = Object.entries(desiredOidc).some(([key, value]) => oidc[key] !== value);
+  if (oidcChanged) {
+    await api(token, 'PUT', '/admin/v1/settings/oidc', desiredOidc, orgId);
+    console.log(`  access token lifetime: ${oidc.accessTokenLifetime ?? 'unknown'} -> 300s`);
+  } else {
+    console.log('  token lifetimes already match');
   }
 
   console.log('\nSummary — add to apps/idarms-portal/.env.local:');
@@ -387,7 +483,8 @@ async function main() {
     console.log('  CROIP_CLIENT_ID=croip-m2m');
     console.log('  CROIP_CLIENT_SECRET=(unchanged from first run — see apps/idarms-portal/.env.local)');
   }
-  console.log('\nTest users: concession-admin / field-agent  (password Password1!)');
+  console.log('\nTest users: concession-admin (CONCESSION_SUPER_ADMIN) / field-agent (FIELD_AGENT)  (password Password1!)');
+  console.log(`Canonical roles: ${PROJECT_ROLE_KEYS.join(', ')}`);
 }
 
 main().catch((err) => {

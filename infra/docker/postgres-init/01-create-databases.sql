@@ -11,3 +11,5 @@ CREATE DATABASE idarms_payment_db;
 CREATE DATABASE idarms_reconciliation_db;
 CREATE DATABASE idarms_reporting_db;
 CREATE DATABASE idarms_integration_db;
+CREATE DATABASE concession_mgmt_db;
+CREATE DATABASE gis_spatial_db;

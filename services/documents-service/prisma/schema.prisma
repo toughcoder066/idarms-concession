@@ -80,16 +80,42 @@ model IdempotencyRecord {
 
 // ============================ Domain models ============================
 model Document {
-  id           String   @id @default(uuid()) @db.Uuid
-  concessionId String   @db.Uuid
-  assemblyId   String   @db.Uuid
-  entityType   String   // RATEPAYER, PROPERTY
-  entityId     String   @db.Uuid
-  documentType String   // GHANA_CARD, TITLE_DEED
-  fileUrl      String
-  uploadedBy   String   @db.Uuid
-  createdAt    DateTime @default(now())
+  id              String       @id @default(uuid()) @db.Uuid
+  concessionId    String       @db.Uuid @map("concession_id")
+  assemblyId      String       @db.Uuid @map("assembly_id")
+  entityType      EntityType   @map("entity_type")
+  entityId        String       @db.Uuid @map("entity_id")
+  documentType    String       @map("document_type")
+  storageProvider String       @default("S3") @map("storage_provider")
+  storageKey      String?      @map("storage_key")
+  fileUrl         String?      @map("file_url")
+  fileName        String?      @map("file_name")
+  mimeType        String?      @map("mime_type")
+  fileSize        Int?         @map("file_size")
+  checksum        String?
+  uploadStatus    UploadStatus @default(PENDING_UPLOAD) @map("upload_status")
+  uploadedBy      String?      @db.Uuid @map("uploaded_by")
+  uploadedAt      DateTime?    @map("uploaded_at")
+  metadata        Json?
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
-  @@index([concessionId, entityType, entityId])
+  @@index([concessionId, assemblyId])
+  @@index([entityType, entityId])
+  @@index([uploadStatus])
   @@map("documents")
+}
+
+enum EntityType {
+  PROPERTY
+  RATEPAYER
+  BILL
+  PAYMENT
+}
+
+enum UploadStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  FAILED
+  DELETED
 }

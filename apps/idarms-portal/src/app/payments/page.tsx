@@ -4,9 +4,16 @@ interface Payment {
   id: string;
   billId: string;
   amount: string;
+  currency?: string;
   channel: string;
-  gatewayRef: string;
+  reference?: string;
+  externalReference?: string | null;
+  gatewayRef?: string;
   status: string;
+}
+
+function paymentReference(payment: Payment): string {
+  return payment.externalReference ?? payment.reference ?? payment.gatewayRef ?? '—';
 }
 
 export default async function PaymentsPage() {
@@ -43,7 +50,7 @@ export default async function PaymentsPage() {
                     <td>{p.billId}</td>
                     <td>{p.amount}</td>
                     <td>{p.channel}</td>
-                    <td>{p.gatewayRef}</td>
+                    <td>{paymentReference(p)}</td>
                     <td><span className="badge">{p.status}</span></td>
                   </tr>
                 ))}

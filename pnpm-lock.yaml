@@ -175,6 +175,12 @@ importers:
 
   apps/idarms-portal:
     dependencies:
+      '@idarms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      lucide-react:
+        specifier: ^1.59.0
+        version: 1.59.0(@types/react@19.3.0)(react@19.3.1)
       next:
         specifier: ^16.4.2
         version: 16.4.2(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -233,6 +239,58 @@ importers:
       '@fastify/swagger-ui':
         specifier: ^6.1.2
         version: 6.1.2
+      '@prisma/client':
+        specifier: ^6.19.3
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      amqplib:
+        specifier: ^2.2.0
+        version: 2.2.0
+      dotenv:
+        specifier: ^18.0.8
+        version: 18.0.8
+      fastify:
+        specifier: ^5.12.7
+        version: 5.12.7
+      jose:
+        specifier: ^5.0.0
+        version: 5.10.0
+      pino:
+        specifier: ^10.4.0
+        version: 10.4.0
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.2
+      prisma:
+        specifier: ^6.19.3
+        version: 6.19.3(typescript@5.9.3)
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
+
+  services/concessions-management-service:
+    dependencies:
+      '@fastify/cors':
+        specifier: ^11.3.1
+        version: 11.3.1
+      '@fastify/swagger':
+        specifier: ^9.9.2
+        version: 9.9.2
+      '@fastify/swagger-ui':
+        specifier: ^6.1.2
+        version: 6.1.2
+      '@idarms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@prisma/client':
         specifier: ^6.19.3
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
@@ -369,6 +427,55 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  services/gis-service:
+    dependencies:
+      '@fastify/cors':
+        specifier: ^11.3.1
+        version: 11.3.1
+      '@fastify/swagger':
+        specifier: ^9.9.2
+        version: 9.9.2
+      '@fastify/swagger-ui':
+        specifier: ^6.1.2
+        version: 6.1.2
+      '@prisma/client':
+        specifier: ^6.19.3
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      amqplib:
+        specifier: ^2.2.0
+        version: 2.2.0
+      dotenv:
+        specifier: ^18.0.8
+        version: 18.0.8
+      fastify:
+        specifier: ^5.12.7
+        version: 5.12.7
+      jose:
+        specifier: ^5.0.0
+        version: 5.10.0
+      pino:
+        specifier: ^10.4.0
+        version: 10.4.0
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.2
+      prisma:
+        specifier: ^6.19.3
+        version: 6.19.3(typescript@5.9.3)
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
+
   services/payment-service:
     dependencies:
       '@fastify/cors':
@@ -418,7 +525,7 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
-  services/property-registry-service:
+  services/property-service:
     dependencies:
       '@fastify/cors':
         specifier: ^11.3.1
@@ -1634,6 +1741,15 @@ packages:
     resolution: {integrity: sha512-U4N8FgzmWxc8k1VH8Kr6lQg18U7Fjvby6wXHVRX/ZZ7IwWbRMgrRbP0Wrb5q5NVinryp4SQampHKdvtecItxUg==}
     engines: {node: 20 || >=22}
 
+  lucide-react@1.59.0:
+    resolution: {integrity: sha512-5qgMyyCPU6OvnKpLS2t693+ZtiqA8oaSweWoUows0BLFKFf6V75m4+CptpmohZHpD5IuOVIBXHBBiv2vpLJmtw==}
+    peerDependencies:
+      '@types/react': '*'
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
@@ -2824,6 +2940,12 @@ snapshots:
   loupe@3.2.1: {}
 
   lru-cache@11.5.3: {}
+
+  lucide-react@1.59.0(@types/react@19.3.0)(react@19.3.1):
+    dependencies:
+      react: 19.3.1
+    optionalDependencies:
+      '@types/react': 19.3.0
 
   magic-string@0.30.21:
     dependencies:

@@ -4,7 +4,7 @@ Fastify TypeScript Prisma PostgreSQL RabbitMQ and ZITADEL
 Version 1.0 | Development team guide | 10 October 2026
 
 Purpose
-This guide explains how the iDARMS development team should create, configure, extend, test and deploy a microservice from the approved golden template. It uses a Property Registry Service as the worked example, but the same method applies to billing, payments, ratepayers, documents, reconciliation and other bounded services.
+This guide explains how the iDARMS development team should create, configure, extend, test and deploy a microservice from the approved golden template. It uses property-service as the worked example, but the same method applies to billing, payments, ratepayers, documents, reconciliation, concessions, GIS and other bounded services.
 
 Required outcome
 A service created from the template must run independently without Envoy, own its PostgreSQL database, validate ZITADEL access tokens, enforce concession and District Assembly boundaries, publish events through the transactional outbox and expose consistent health, documentation and observability endpoints.
@@ -37,7 +37,7 @@ A non-root runtime image and a Docker Compose development stack.
 
 What must change in each service
 Change	Example for Property Registry Service
-Repository and package name	idarms-property-registry-service and @idarms/property-registry-service
+Repository and package name	property-service and @idarms/property-service
 Business module	Replace modules/example with modules/properties
 Database name	property_registry
 Permissions	property:read, property:create, property:verify and property:update
@@ -120,11 +120,11 @@ Record ownership and the service charter in the repository README.
 
 Example package change
 json
-"name": "@idarms/property-registry-service",
+"name": "@idarms/property-service",
 "version": "0.1.0"
 Example environment change
 env
-SERVICE_NAME=property-registry-service
+SERVICE_NAME=property-service
 SERVICE_VERSION=0.1.0
 PORT=3010
 DATABASE_URL=postgresql://idarms:idarms_dev_only@127.0.0.1:5433/property_registry?schema=public
@@ -249,39 +249,52 @@ Required ZITADEL objects
 Object	Use
 Project	Groups the iDARMS APIs and role definitions
 API application	Defines the audience accepted by the service
-Roles	Defines permissions such as property:read and property:create
-Actions or claim mapping	Adds approved concession and Assembly context to the access token
+Roles	Human roles (ASSEMBLY_ADMIN, FINANCE_OFFICER, …); capabilities are bundled by the shared role model
+Claim mapping	Standard ZITADEL role and resource-owner claims; no per-user context action
+Org registry	Maps orgId to concessionId/assemblyId through the concessions service
 Service users	Authenticates service-to-service operations without a human account
-Expected context claim
+Expected authorization claims
 json
 {
-  "urn:idarms:context": {
-    "concessionId": "11111111-1111-1111-1111-111111111111",
-    "assemblyId": "22222222-2222-2222-2222-222222222222"
-  }
+  "urn:zitadel:iam:org:project:roles": {
+    "ASSEMBLY_ADMIN": {
+      "395945616116613123": "ama.idarms.local"
+    }
+  },
+  "urn:zitadel:iam:user:resourceowner:id": "395945616116613123"
 }
-Production configuration
+Local configuration (current environment)
+env
+AUTH_MODE=zitadel
+ZITADEL_ISSUER=http://localhost:8080
+ZITADEL_AUDIENCE=<service-api-audience>
+ZITADEL_JWKS_URI=http://localhost:8080/oauth/v2/keys
+ORG_CONTEXT_URL=http://localhost:3100
+
+Future production configuration (no production deployment exists yet)
 env
 AUTH_MODE=zitadel
 ZITADEL_ISSUER=https://auth.idarms.com
 ZITADEL_AUDIENCE=<service-api-audience>
 ZITADEL_JWKS_URI=https://auth.idarms.com/oauth/v2/keys
+ORG_CONTEXT_URL=https://concessions.internal.idarms.com
 The service validates token signature, issuer, audience and lifetime. The gateway may perform the same validation later, but gateway validation does not replace service validation.
 
 9. Enforce concession and Assembly isolation
-Every business query must include the authorised concession and Assembly boundary. A valid user identifier or property identifier does not by itself authorise access.
+Every business query must include the authorised concession and Assembly boundary. A valid user identifier or property identifier does not by itself authorise access. `request.auth.authorizedOrgIds` is derived from the ZITADEL role claim; a role in Org A never authorises Org B.
 
 Required query pattern
 typescript
+const context = await resolveOrgContext(request.auth.homeOrgId!);
 const property = await prisma.property.findFirst({
   where: {
     id: propertyId,
-    concessionId: request.auth.concessionId,
-    assemblyId: request.auth.assemblyId
+    concessionId: context.concessionId,
+    assemblyId: context.assemblyId
   }
 });
 Patterns to reject
-Using concessionId or assemblyId supplied in a normal request body without comparing it to the verified token context.
+Using concessionId or assemblyId supplied in a normal request body without resolving it to an org and checking `authorizedOrgIds`.
 
 Fetching a record by its primary key and checking tenancy only after returning or modifying it.
 
@@ -305,7 +318,7 @@ Event type	PropertySubmitted
 Routing key	property.submitted.v1
 Aggregate type	Property
 Aggregate version	1 for the first property state
-Producer	property-registry-service
+Producer	property-service
 Event envelope requirements
 A globally unique event ID.
 
@@ -421,10 +434,12 @@ Add Envoy only when the shared environment needs one external address and centra
 
 Envoy integration point
 text
-/api/v1/properties/*  -> property-registry-service:3010
+/api/v1/properties/*  -> property-service:3010
 /api/v1/ratepayers/*  -> ratepayer-service:3020
 /api/v1/bills/*       -> billing-service:3030
 /api/v1/payments/*    -> payment-service:3040
+/api/v1/concessions/* -> concessions-management-service:3100
+/api/v1/zones/*       -> gis-service:3110
 Services must remain callable and testable without Envoy. Envoy provides external routing, TLS, coarse token validation, limits and access logs. Business authorization remains inside each service.
 
 16. Prepare continuous integration and deployment
