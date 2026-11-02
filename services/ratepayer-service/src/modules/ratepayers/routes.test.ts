@@ -86,6 +86,51 @@ describe('ratepayer replica tenant isolation', () => {
     expect(prisma.ratepayer.findFirst).not.toHaveBeenCalled();
   });
 
+  it('lets the concession super admin list every assembly of their own concession only (ADR-0002)', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/ratepayers',
+      headers: {
+        ...tenantHeaders(CONCESSION_A),
+        'x-idarms-roles': 'CONCESSION_SUPER_ADMIN',
+        'x-idarms-scope-level': 'PORTFOLIO',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.ratepayer.findMany).toHaveBeenCalledWith({ where: { concessionId: CONCESSION_A } });
+  });
+
+  it('refuses any other concession-level role without an assembly', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/ratepayers',
+      headers: {
+        ...tenantHeaders(CONCESSION_A),
+        'x-idarms-roles': 'ASSEMBLY_ADMIN,FINANCE_OFFICER',
+        'x-idarms-scope-level': 'PORTFOLIO',
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(prisma.ratepayer.findMany).not.toHaveBeenCalled();
+  });
+
+  it('refuses a super admin role claimed at assembly scope without an assembly', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/ratepayers',
+      headers: {
+        ...tenantHeaders(CONCESSION_A),
+        'x-idarms-roles': 'CONCESSION_SUPER_ADMIN',
+        'x-idarms-scope-level': 'ASSEMBLY',
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(prisma.ratepayer.findMany).not.toHaveBeenCalled();
+  });
+
   it('scopes a get by id to the caller tenant, so another tenant row is not found', async () => {
     const response = await app.inject({
       method: 'GET',

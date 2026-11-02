@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canPublishRates, scopeFromAuth } from './context';
+import { canAccessAssembly, canPublishRates, scopeFromAuth } from './context';
 import type { AuthContext } from '../../types/global';
 
 function auth(overrides: Partial<AuthContext>): AuthContext {
@@ -32,11 +32,46 @@ describe('concession approval policy', () => {
 });
 
 describe('tenant scope', () => {
-  it('drops the assembly filter for portfolio scope', () => {
+  it('drops the assembly filter for the concession super admin at portfolio scope (ADR-0002)', () => {
     expect(scopeFromAuth(auth({
-      assemblyId: '22222222-2222-2222-2222-222222222222',
+      roles: ['CONCESSION_SUPER_ADMIN'],
+      roleGrants: [{ role: 'CONCESSION_SUPER_ADMIN', orgId: 'portfolio-org' }],
+      homeOrgId: 'portfolio-org',
       scopeLevel: 'PORTFOLIO',
     }))).toEqual({ concessionId: '11111111-1111-1111-1111-111111111111' });
+  });
+
+  it('does not widen portfolio scope for any role other than the super admin', () => {
+    expect(scopeFromAuth(auth({
+      roles: ['ASSEMBLY_ADMIN'],
+      roleGrants: [{ role: 'ASSEMBLY_ADMIN', orgId: 'portfolio-org' }],
+      homeOrgId: 'portfolio-org',
+      scopeLevel: 'PORTFOLIO',
+    }))).toBeNull();
+  });
+
+  it('does not widen portfolio scope when the super admin grant is on another org', () => {
+    expect(scopeFromAuth(auth({
+      roles: ['CONCESSION_SUPER_ADMIN'],
+      roleGrants: [{ role: 'CONCESSION_SUPER_ADMIN', orgId: 'assembly-org' }],
+      homeOrgId: 'portfolio-org',
+      scopeLevel: 'PORTFOLIO',
+    }))).toBeNull();
+  });
+
+  it('refuses an assembly-scope caller with no assembly instead of widening to the concession', () => {
+    expect(scopeFromAuth(auth({ roles: ['ASSEMBLY_ADMIN'], scopeLevel: 'ASSEMBLY' }))).toBeNull();
+  });
+
+  it('limits assembly access checks to the caller assembly unless super admin', () => {
+    const assemblyAdmin = auth({
+      roles: ['ASSEMBLY_ADMIN'],
+      assemblyId: '22222222-2222-2222-2222-222222222222',
+      scopeLevel: 'ASSEMBLY',
+    });
+    expect(canAccessAssembly(assemblyAdmin, '22222222-2222-2222-2222-222222222222')).toBe(true);
+    expect(canAccessAssembly(assemblyAdmin, '33333333-3333-3333-3333-333333333333')).toBe(false);
+    expect(canAccessAssembly(auth({ roles: ['ASSEMBLY_ADMIN'] }), '33333333-3333-3333-3333-333333333333')).toBe(false);
   });
 
   it('keeps the assembly filter for assembly scope', () => {

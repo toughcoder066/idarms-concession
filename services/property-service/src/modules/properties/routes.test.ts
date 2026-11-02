@@ -95,6 +95,39 @@ describe('property replica tenant isolation', () => {
     });
   });
 
+  it('lets the concession super admin read every assembly of their own concession only (ADR-0002)', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/properties/row-in-any-assembly',
+      headers: {
+        ...tenantHeaders(CONCESSION_A),
+        'x-idarms-roles': 'CONCESSION_SUPER_ADMIN',
+        'x-idarms-scope-level': 'PORTFOLIO',
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(prisma.property.findFirst).toHaveBeenCalledWith({
+      where: { id: 'row-in-any-assembly', concessionId: CONCESSION_A },
+    });
+  });
+
+  it('never lets the concession super admin verify a property (oversight only, ADR-0002)', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/properties/some-id/verify',
+      headers: {
+        ...tenantHeaders(CONCESSION_A),
+        'x-idarms-roles': 'CONCESSION_SUPER_ADMIN',
+        'x-idarms-scope-level': 'PORTFOLIO',
+      },
+      payload: { status: 'APPROVED' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('refuses a verification without tenant context and never opens a transaction', async () => {
     const response = await app.inject({
       method: 'POST',

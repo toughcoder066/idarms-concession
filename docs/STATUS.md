@@ -118,7 +118,16 @@ Cross-cutting facts recorded from the deferred code. They are violations of CLAU
 |---|---|---|---|---|---|---|
 | Service template conformance (health, metrics, OpenAPI, env validation) | PARTIAL | yes | ? | no | n/a | Each service has `config.ts` (zod env), `app.ts`, and the `routes/service/policy/schemas` split. README lists `/health/live`, `/health/ready`, `/metrics` and `/docs`, but these were not exercised. |
 | ZITADEL token validation and `urn:idarms:context` | PARTIAL | yes | ? | partial (concessions-mgmt context tests) | n/a | `svc/*/src/plugins/auth.ts` (JWKS, issuer, audience). `AUTH_MODE` defaults to `disabled` and is refused only when `NODE_ENV=production` (`croip-integration-service/src/config.ts:41-43`); see T3. Context comes from the org registry, not a claim (T5). No CROIP token claim is read. |
-| Tenancy filters (concession + Assembly) and isolation tests | PARTIAL | yes | ? | 13 route tests (ratepayer 5, property 5, croip-integration 3) | partial | **Slice 1a, 2026-11-02:** routes in the 9 template services and the service template now pass `requireTenant`, which returns 403 `tenant_unresolved` unless both ids are resolved (`svc/*/src/plugins/auth.ts`). `TenantScope` fields are required, so an unscoped query no longer compiles. `GET /v1/sync[/:id]` returns 503 `not_available` (`svc/croip-integration-service/src/modules/sync/routes.ts`) and the unscoped `sync/service.ts` was deleted. The tests fail against the old routes (checked). **Consequence:** PORTFOLIO-scoped callers (concession-level org, no assembly), including the portal's default dev context (`IDARMS_SCOPE_LEVEL=PORTFOLIO`, empty `IDARMS_ASSEMBLY_ID`), now get 403 from these 9 services until O29 decides whether concession-wide reads are allowed. Still open: event handlers trust envelope tenant ids (T4). |
+| Tenancy filters (concession + Assembly) and isolation tests | PARTIAL | yes | ? | 13 route tests (ratepayer 5, property 5, croip-integration 3) | partial | **Slice 1a, 2026-11-02:** routes in the 9 template services and the service template now pass `requireTenant`, which returns 403 `tenant_unresolved` unless both ids are resolved (`svc/*/src/plugins/auth.ts`). `TenantScope` fields are required, so an unscoped query no longer compiles. `GET /v1/sync[/:id]` returns 503 `not_available` (`svc/croip-integration-service/src/modules/sync/routes.ts`) and the unscoped `sync/service.ts` was deleted. The tests fail against the old routes (checked). **Slice 1b, 2026-11-02 (ADR-0002):**
+- **Reads:** read routes use `requireReadScope`/`readScopeOf` (`svc/*/src/lib/tenancy.ts`). They pass an assembly-specific caller, or **only** a `CONCESSION_SUPER_ADMIN` whose grant is on their home portfolio org. The super admin's queries filter by concession only.
+- **Writes:** routes that change data (property verify, payment checkout, GIS zone/block create) keep `requireTenant`, so the super admin cannot act inside an assembly.
+- **Concessions management:** `scopeFromAuth` and `canAccessAssembly` (`concessions/context.ts`) no longer widen on scope level alone, and no longer widen when a non-super-admin has no assembly.
+- **GIS:** `zones/routes.ts` reads use the same rule. Writes take the assembly only from the token.
+- **Super admin capabilities:** `fee_fixing:manage` and `agent:manage` removed (`packages/contracts/src/roles.ts`, synced to every service).
+- **Dev mode:** now reads `x-idarms-roles` and `x-idarms-scope-level`.
+- **Tests:** 128 pass across the workspace, including the new ADR-0002 cases in ratepayer, property, GIS, contracts and concessions-mgmt.
+
+Still open: event handlers trust envelope tenant ids (T4). The super admin view is not yet narrowed to *currently assigned* assemblies (slice 4). |
 | Outbox + worker per service | DONE (pattern) | yes | ? | no | partial | `svc/*/src/messaging/outbox.ts`: written in the business tx; the claim tx (`FOR UPDATE SKIP LOCKED`) commits before publishing, so two workers could double-publish (consumers dedupe). Retries keep the same id. |
 | Inbox / `processOnce` | PARTIAL | yes | ? | no | partial | `svc/*/src/messaging/inbox.ts` (unique `(consumerId, messageId)`, same tx); ack after commit. **No dead-lettering**: all workers `nack(requeue=true)`. No envelope validation (`JSON.parse(...) as EventEnvelope`). |
 | Idempotency keys on financial commands | DEFERRED | payment checkout only | | | | `IdempotencyRecord` in every schema; used in `payment-service`. |
@@ -271,6 +280,10 @@ Each slice is small enough for one session. Owner approves before starting.
    - Add a cross-tenant and an unresolved-context test per route.
    - Add tenant columns to `sync_records` (that needs a new migration, so plan first).
    - Depends on: nothing. **Recommended first code slice.**
+1b. **DONE 2026-11-02.** The concession super admin gets a read-only view across their concession's assemblies; every other role stays assembly-specific (ADR-0002). Follow-ups:
+   - Route-level tests for the rates and agents refusal in concessions-mgmt. The refusal is enforced by the role lists and capabilities and covered by the contracts test.
+   - `rates.ts` `requestedAsSupport` labelling is now reachable only by users who hold both the super admin and finance roles.
+   - Show assembly names (not ids) in the portal's aggregated lists.
 2. **Replica guard and fixture source (ratepayer).** Steps:
    - Add a CROIP version column.
    - Apply only newer versions.

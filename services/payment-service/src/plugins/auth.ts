@@ -3,6 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config } from '../config';
 import { resolveOrgContext } from '../lib/org-context';
 import { capabilitiesForRoles, parseRoleGrants } from '../lib/roles';
+import { readScopeFromAuth, type ReadScope } from '../lib/tenancy';
 import type { AuthContext } from '../types/global';
 
 function parseRoles(payload: Record<string, unknown>): string[] {
@@ -122,10 +123,11 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
       const headerPermissions = parsePermissions(request.headers['x-idarms-permissions']);
       request.auth = {
         subject: (request.headers['x-idarms-actor-id'] as string | undefined) ?? 'dev-actor',
-        roles: [],
+        roles: parsePermissions(request.headers['x-idarms-roles']),
         permissions: headerPermissions.length > 0 ? headerPermissions : config.permissions,
         concessionId: request.headers['x-idarms-concession-id'] as string | undefined,
         assemblyId: request.headers['x-idarms-assembly-id'] as string | undefined,
+        scopeLevel: request.headers['x-idarms-scope-level'] as string | undefined,
       };
     });
   }
@@ -168,4 +170,27 @@ export function tenantOf(request: FastifyRequest): TenantContext {
     throw new Error('tenantOf called on a route without requireTenant');
   }
   return { concessionId, assemblyId };
+}
+
+/**
+ * Read routes only. Passes an assembly-specific caller with both ids, or the
+ * concession super admin with their concession (ADR-0002). Writes keep
+ * requireTenant, so the super admin never acts inside an assembly.
+ */
+export async function requireReadScope(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!readScopeFromAuth(request.auth)) {
+    await reply.code(403).send({
+      error: 'tenant_unresolved',
+      message: 'Concession and assembly context could not be resolved',
+    });
+  }
+}
+
+/** Read scope of a request that has passed requireReadScope. */
+export function readScopeOf(request: FastifyRequest): ReadScope {
+  const scope = readScopeFromAuth(request.auth);
+  if (!scope) {
+    throw new Error('readScopeOf called on a route without requireReadScope');
+  }
+  return scope;
 }

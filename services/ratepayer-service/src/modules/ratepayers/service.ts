@@ -1,18 +1,14 @@
 import type { PrismaClient } from '../../../generated/prisma';
+import { readScopeWhere, type ReadScope } from '../../lib/tenancy';
 
-export interface TenantScope {
-  concessionId: string;
-  assemblyId: string;
-}
-
-export async function list(prisma: PrismaClient, scope: TenantScope) {
+export async function list(prisma: PrismaClient, scope: ReadScope) {
   return prisma.ratepayer.findMany({
-    where: { concessionId: scope.concessionId, assemblyId: scope.assemblyId },
+    where: readScopeWhere(scope),
   });
 }
 
-export async function getById(prisma: PrismaClient, id: string, scope: TenantScope) {
+export async function getById(prisma: PrismaClient, id: string, scope: ReadScope) {
   return prisma.ratepayer.findFirst({
-    where: { id, concessionId: scope.concessionId, assemblyId: scope.assemblyId },
+    where: { id, ...readScopeWhere(scope) },
   });
 }

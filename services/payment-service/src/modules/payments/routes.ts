@@ -1,26 +1,26 @@
 import { createHmac } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { config } from '../../config';
-import { requirePermissions, requireTenant, tenantOf } from '../../plugins/auth';
+import { requirePermissions, requireReadScope, readScopeOf, requireTenant, tenantOf } from '../../plugins/auth';
 import { byIdParamsSchema, checkoutBodySchema, listQuerySchema, webhookBodySchema } from './schemas';
 import * as service from './service';
 import type { CheckoutInput, WebhookInput } from './service';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get('/v1/payments', {
-    preHandler: [requirePermissions(['payment:read']), requireTenant],
+    preHandler: [requirePermissions(['payment:read']), requireReadScope],
     schema: { querystring: listQuerySchema },
   }, async (request) => {
-    const rows = await service.list(app.prisma, tenantOf(request));
+    const rows = await service.list(app.prisma, readScopeOf(request));
     return { data: rows };
   });
 
   app.get('/v1/payments/:id', {
-    preHandler: [requirePermissions(['payment:read']), requireTenant],
+    preHandler: [requirePermissions(['payment:read']), requireReadScope],
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const row = await service.getById(app.prisma, id, tenantOf(request));
+    const row = await service.getById(app.prisma, id, readScopeOf(request));
     if (!row) {
       return reply.code(404).send({ error: 'not_found', message: 'Resource not found' });
     }

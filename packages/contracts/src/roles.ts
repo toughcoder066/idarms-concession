@@ -183,14 +183,13 @@ export const ROLE_CAPABILITIES: Record<ProjectRole, readonly Capability[]> = {
     'assembly:manage',
     'staff:read',
     'staff:manage',
+    // Oversight, not operations (ADR-0002): rates and agent assignment are view-only.
     'fee_fixing:read',
-    'fee_fixing:manage',
     'approval:read',
     'target:read',
     'target:manage',
     'audit:read',
     'reporting:read',
-    'agent:manage',
   ],
   ASSEMBLY_ADMIN: [
     ...ORG_READ,

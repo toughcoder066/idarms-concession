@@ -1,22 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { PaymentTransaction, Prisma, PrismaClient } from '../../../generated/prisma';
+import { readScopeWhere, type ReadScope } from '../../lib/tenancy';
 import { appendOutboxEvent } from '../../messaging/outbox';
 import { buildEnvelope } from '../../messaging/events';
 
-export interface TenantScope {
-  concessionId: string;
-  assemblyId: string;
-}
-
-export async function list(prisma: PrismaClient, scope: TenantScope) {
+export async function list(prisma: PrismaClient, scope: ReadScope) {
   return prisma.paymentTransaction.findMany({
-    where: { concessionId: scope.concessionId, assemblyId: scope.assemblyId },
+    where: readScopeWhere(scope),
   });
 }
 
-export async function getById(prisma: PrismaClient, id: string, scope: TenantScope) {
+export async function getById(prisma: PrismaClient, id: string, scope: ReadScope) {
   return prisma.paymentTransaction.findFirst({
-    where: { id, concessionId: scope.concessionId, assemblyId: scope.assemblyId },
+    where: { id, ...readScopeWhere(scope) },
   });
 }
 

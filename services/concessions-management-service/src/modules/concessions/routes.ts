@@ -44,9 +44,10 @@ const READ_ROLES = [
 ];
 const ADMIN_ROLES = ['CONCESSION_SUPER_ADMIN', 'ASSEMBLY_ADMIN'];
 const PORTFOLIO_MANAGE_ROLES = ['CONCESSION_SUPER_ADMIN'];
-const RATE_EDIT_ROLES = [...ADMIN_ROLES, 'FINANCE_OFFICER'];
+// Rates and agent assignment are assembly operations; the super admin only views them (ADR-0002).
+const RATE_EDIT_ROLES = ['ASSEMBLY_ADMIN', 'FINANCE_OFFICER'];
 const TARGET_ROLES = ADMIN_ROLES;
-const AGENT_ROLES = [...ADMIN_ROLES, 'FIELD_OPS_MANAGER'];
+const AGENT_ROLES = ['ASSEMBLY_ADMIN', 'FIELD_OPS_MANAGER'];
 const AUDIT_ROLES = ['CONCESSION_SUPER_ADMIN', 'ASSEMBLY_ADMIN', 'ASSEMBLY_VIEWER'];
 
 function fiscalYear(query: unknown): number {

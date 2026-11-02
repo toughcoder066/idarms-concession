@@ -1,24 +1,24 @@
 import type { FastifyInstance } from 'fastify';
-import { requirePermissions, requireTenant, tenantOf } from '../../plugins/auth';
+import { requirePermissions, requireReadScope, readScopeOf, requireTenant, tenantOf } from '../../plugins/auth';
 import { byIdParamsSchema, listQuerySchema, verifyBodySchema } from './schemas';
 import * as service from './service';
 import type { VerifyInput } from './service';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get('/v1/properties', {
-    preHandler: [requirePermissions(['property:read']), requireTenant],
+    preHandler: [requirePermissions(['property:read']), requireReadScope],
     schema: { querystring: listQuerySchema },
   }, async (request) => {
-    const rows = await service.list(app.prisma, tenantOf(request));
+    const rows = await service.list(app.prisma, readScopeOf(request));
     return { data: rows };
   });
 
   app.get('/v1/properties/:id', {
-    preHandler: [requirePermissions(['property:read']), requireTenant],
+    preHandler: [requirePermissions(['property:read']), requireReadScope],
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const row = await service.getById(app.prisma, id, tenantOf(request));
+    const row = await service.getById(app.prisma, id, readScopeOf(request));
     if (!row) {
       return reply.code(404).send({ error: 'not_found', message: 'Resource not found' });
     }

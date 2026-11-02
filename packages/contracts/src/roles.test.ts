@@ -44,6 +44,22 @@ describe('iDARMS role model', () => {
     expect(ROLE_CAPABILITIES.CONCESSION_SUPER_ADMIN).not.toContain('approval:manage');
   });
 
+  it('gives CONCESSION_SUPER_ADMIN oversight and administration but no assembly operations (ADR-0002)', () => {
+    const superAdmin = ROLE_CAPABILITIES.CONCESSION_SUPER_ADMIN;
+    expect(superAdmin).toEqual(expect.arrayContaining(['assembly:manage', 'staff:manage', 'target:manage']));
+    expect(superAdmin).toEqual(expect.arrayContaining(['fee_fixing:read', 'ratepayer:read', 'payment:read']));
+    for (const operation of [
+      'fee_fixing:manage',
+      'agent:manage',
+      'property:verify',
+      'payment:checkout',
+      'gis:manage',
+      'document:upload',
+    ]) {
+      expect(superAdmin).not.toContain(operation);
+    }
+  });
+
   it('maps roles to their capabilities', () => {
     expect(capabilitiesForRoles(['FIELD_AGENT'])).toEqual(
       expect.arrayContaining(['property:read', 'property:verify', 'gis:read']),
