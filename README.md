@@ -288,11 +288,13 @@ The access token carries:
 
 - `urn:zitadel:iam:org:project:roles` — `{ role: { orgId: orgDomain } }`, including
   external assembly-org grants for the Concession Super Admin.
-- No `urn:zitadel:iam:user:resourceowner:id` claim in the current local v4.16.0 instance.
-  The portal and services therefore infer an Assembly Admin's home org from the org ID
-  attached to their `ASSEMBLY_ADMIN` role grant and resolve it through
-  `zitadel_org_contexts`. A Super Admin keeps portfolio scope.
-- No `urn:idarms:context` claim.
+- `urn:zitadel:iam:user:resourceowner:id` — the user's home organisation. The portal
+  requests it with the `urn:zitadel:iam:user:resourceowner` scope. It is resolved through
+  `zitadel_org_contexts` to the concession and assembly. A token without it is refused
+  (401 `home_org_missing`, logged); the home org is never inferred from role grants.
+- Permissions come only from roles granted in the home organisation, and only the
+  iDARMS project's role claims count (`ZITADEL_PROJECT_ID`).
+- No `urn:idarms:context` and no `urn:idarms:permissions` claim (ADR-0003).
 
 ### Staff & Access / Access Directory (local)
 

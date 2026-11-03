@@ -12,7 +12,7 @@ Work only on: (1) iDARMS onboarding and credentials with CROIP, (2) learning ass
 
 ## 1. Order of authority (when sources disagree)
 
-1. The owner's instructions in the current session, `docs/context/00-operating-model.md`, and `docs/decisions/` (ADRs).
+1. The owner's instructions in the current session, `docs/context/00-operating-model.md`, and `docs/decisions/` (ADRs; ADR-0003 replaces the guide's `urn:idarms:context` claim).
 2. `docs/context/02-croip-integration-contract.md`: the CROIP ⇄ iDARMS contract (imported below).
 3. CROIP Framework v1.0, 8 Oct 2026 (`docs/source/croip-framework-v1.0.txt`): a **proposed design**, not an implemented spec. Where ADR-0001 differs from it, ADR-0001 wins.
 4. iDARMS Golden Template Guide v1.0 (`docs/source/idarms-golden-template-guide-v1.0.md`, distilled in `docs/context/03-golden-template-rules.md`): how every service is built.
@@ -64,7 +64,7 @@ Two RabbitMQ roles exist. Do not mix them. (1) iDARMS's own internal broker betw
 
 - **Never** create or edit authoritative ratepayer/property data locally. Replica rows come from CROIP events only, applied with `aggregateVersion` ordering.
 - Key all cross-system references by **CROIP-issued IDs** (`croipRatepayerId`, `croipPropertyId`, CROIP assembly IDs). Local codes are secondary. A phone number is a contact channel, not a person identifier.
-- **CROIP tokens carry no concession claim.** CROIP identifies us by `client_id` through its own lookup. Never build iDARMS to read `urn:idarms:context` from a CROIP token. That claim exists only in iDARMS's own ZITADEL.
+- **CROIP tokens carry no concession claim.** CROIP identifies us by `client_id` through its own lookup. Never build iDARMS to read tenancy from a CROIP token. iDARMS's own tokens carry no concession claim either: tenancy comes from the home-organisation claim through the org registry (ADR-0003).
 - **A CROIP credential can do very little** (properties and ratepayers manage/read, API-client self-management). It cannot read boundaries or reference data. Never assume a CROIP endpoint works for us because Postman or the README shows it. Check `docs/context/04-phase1-connect-register-receive.md` section 2.3.
 - **Never use CROIP's unscoped list endpoints** (`GET /v1/properties`, `GET /v1/ratepayers/directory`) to build the replica. They are not scoped to us (spec gap G5).
 - **Never assume one assembly.** A concession has one or more assemblies and the set changes over time. Scope by concession and assembly everywhere.
@@ -84,7 +84,7 @@ Two RabbitMQ roles exist. Do not mix them. (1) iDARMS's own internal broker betw
 
 ## 5. Tech baseline (from the golden template)
 
-Node 24, Fastify 5 + TypeScript, Prisma + PostgreSQL (**one database per service**, no cross-service table access), ZITADEL JWT/JWKS validation (claim `urn:idarms:context` = `{concessionId, assemblyId}`), RabbitMQ, Docker Compose. Each service has its own outbox worker, inbox/`processOnce`, audit and idempotency models, `/health/live`, `/health/ready`, `/metrics`, OpenAPI. Layout per service: `routes.ts` (transport), `service.ts` (rules + transaction), `policy.ts`, `schemas.ts`. Routes never hold business logic.
+Node 24, Fastify 5 + TypeScript, Prisma + PostgreSQL (**one database per service**, no cross-service table access), ZITADEL JWT/JWKS validation (identity, home organisation `urn:zitadel:iam:user:resourceowner:id` and organisation-bound role grants; the org registry maps the home organisation to `{concessionId, assemblyId}`; no `urn:idarms:context` claim, ADR-0003), RabbitMQ, Docker Compose. Each service has its own outbox worker, inbox/`processOnce`, audit and idempotency models, `/health/live`, `/health/ready`, `/metrics`, OpenAPI. Layout per service: `routes.ts` (transport), `service.ts` (rules + transaction), `policy.ts`, `schemas.ts`. Routes never hold business logic.
 
 Commands (confirm they exist in `package.json`): `npm run typecheck`, `npm test`, `npm run build`, `npm run prisma:generate`, `npm run prisma:deploy`, `npm run worker:outbox`.
 

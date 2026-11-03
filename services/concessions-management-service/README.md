@@ -241,8 +241,10 @@ ZITADEL_AUDIENCE=<idarms-portal client id>
 ZITADEL_JWKS_URI=http://localhost:8080/oauth/v2/keys
 ```
 
-The portal and this service infer an Assembly Admin's org from the
-`ASSEMBLY_ADMIN` role grant because the local v4.16.0 token omits the
-`urn:zitadel:iam:user:resourceowner:id` claim. Super Admins remain portfolio-scoped.
+The caller's home organisation comes only from the
+`urn:zitadel:iam:user:resourceowner:id` claim (the portal requests the
+`urn:zitadel:iam:user:resourceowner` scope). A token without it is refused with
+401 `home_org_missing`; it is never inferred from role grants. Super Admins remain
+portfolio-scoped (ADR-0002, ADR-0003).
 Local UI fixtures: `concession-admin` / `Password1!` and
 `ama-active-admin@idarms.local` / `Password1!` (active AMA Assembly Admin).
