@@ -16,6 +16,8 @@ export const appConfig = {
     process.env.NEXT_PUBLIC_CROIP_API_URL ??
     'http://localhost:3020',
   croipRequestTimeoutMs: Number(process.env.CROIP_REQUEST_TIMEOUT_MS ?? 10000),
+  /** Opt-in only: forward the dev identity headers below when there is no access token. */
+  devHeaderAuth: process.env.IDARMS_DEV_HEADER_AUTH === 'true',
   devConcessionId: process.env.IDARMS_CONCESSION_ID ?? '11111111-1111-1111-1111-111111111111',
   devAssemblyId: process.env.IDARMS_ASSEMBLY_ID ?? '',
   devOrgId: process.env.IDARMS_ORG_ID ?? '',

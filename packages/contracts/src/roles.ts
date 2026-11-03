@@ -318,16 +318,17 @@ export interface RoleGrant {
  * Parses both ZITADEL role claim shapes:
  *   urn:zitadel:iam:org:project:roles
  *   urn:zitadel:iam:org:project:{projectId}:roles
- * into a flat role/org grant list. Unknown (legacy) role keys are ignored.
+ * into a flat role/org grant list. The project-specific claim counts only for
+ * the iDARMS project, so roles from any other ZITADEL project are ignored.
+ * Unknown (legacy) role keys are ignored.
  */
-export function parseRoleGrants(claims: Record<string, unknown>): RoleGrant[] {
+export function parseRoleGrants(claims: Record<string, unknown>, projectId?: string): RoleGrant[] {
   const grants: RoleGrant[] = [];
   const seen = new Set<string>();
+  const projectClaim = projectId ? `urn:zitadel:iam:org:project:${projectId}:roles` : undefined;
 
   for (const [key, value] of Object.entries(claims)) {
-    const isRoleClaim =
-      key === 'urn:zitadel:iam:org:project:roles'
-      || (key.startsWith('urn:zitadel:iam:org:project:') && key.endsWith(':roles'));
+    const isRoleClaim = key === 'urn:zitadel:iam:org:project:roles' || key === projectClaim;
     if (!isRoleClaim || !value || typeof value !== 'object') continue;
 
     for (const [role, orgs] of Object.entries(value as Record<string, unknown>)) {
@@ -346,6 +347,16 @@ export function parseRoleGrants(claims: Record<string, unknown>): RoleGrant[] {
   }
 
   return grants;
+}
+
+/**
+ * Roles granted in one organization. Permissions follow the organization the
+ * tenant was resolved from, so a role held in another organization never
+ * applies here.
+ */
+export function rolesInOrg(grants: readonly RoleGrant[], orgId: string | undefined): ProjectRole[] {
+  if (!orgId) return [];
+  return [...new Set(grants.filter((grant) => grant.orgId === orgId).map((grant) => grant.role))];
 }
 
 export function capabilitiesForRoles(roles: readonly string[]): Capability[] {

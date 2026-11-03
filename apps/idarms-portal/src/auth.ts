@@ -1,4 +1,4 @@
-import { capabilitiesForRoles, parseRoleGrants } from '@idarms/contracts';
+import { capabilitiesForRoles, parseRoleGrants, rolesInOrg } from '@idarms/contracts';
 import NextAuth from 'next-auth';
 import Zitadel from 'next-auth/providers/zitadel';
 import { resolveOrgContext } from './lib/org-context';
@@ -47,29 +47,31 @@ function decodeJwt(token?: string): JwtPayload | null {
   }
 }
 
-function stringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
-  if (typeof value === 'string' && value.trim()) return value.split(',').map((item) => item.trim()).filter(Boolean);
-  if (value && typeof value === 'object') return Object.keys(value as Record<string, unknown>);
-  return [];
+const RESOURCE_OWNER_CLAIM = 'urn:zitadel:iam:user:resourceowner:id';
+
+if (!process.env.ZITADEL_PROJECT_ID) {
+  console.warn('[auth] ZITADEL_PROJECT_ID is not set; only the generic project role claim is read.');
 }
 
 async function claimsFromAccessToken(accessToken?: string) {
   const payload = decodeJwt(accessToken);
   if (!payload) return null;
 
-  const roleGrants = parseRoleGrants(payload);
-  const roles = [...new Set(roleGrants.map((grant) => grant.role))];
-  const explicitPermissions = stringArray(payload['urn:idarms:permissions']);
-  const permissions = [...new Set([...capabilitiesForRoles(roles), ...explicitPermissions])];
-  const resourceOwnerId = typeof payload['urn:zitadel:iam:user:resourceowner:id'] === 'string'
-    ? payload['urn:zitadel:iam:user:resourceowner:id']
-    : undefined;
-  // Local ZITADEL access tokens may omit the resource-owner claim. Assembly
-  // Admins still carry their org in the ASSEMBLY_ADMIN role grant, which is
-  // sufficient to resolve their assembly context from the registry.
-  const assemblyAdminOrgId = roleGrants.find((grant) => grant.role === 'ASSEMBLY_ADMIN')?.orgId;
-  const homeOrgId = resourceOwnerId ?? assemblyAdminOrgId;
+  const roleGrants = parseRoleGrants(payload, process.env.ZITADEL_PROJECT_ID);
+  const resourceOwner = payload[RESOURCE_OWNER_CLAIM];
+  // The home organisation comes from ZITADEL only, never from role grants.
+  // Without it the session carries no roles; the services refuse it too.
+  const homeOrgId = typeof resourceOwner === 'string' && resourceOwner ? resourceOwner : undefined;
+  if (!homeOrgId) {
+    console.warn('[auth] Access token has no home organisation claim; session gets no roles.', {
+      subject: typeof payload.sub === 'string' ? payload.sub : undefined,
+      missingClaim: RESOURCE_OWNER_CLAIM,
+      claimsPresent: Object.keys(payload),
+    });
+  }
+  // Roles count only in the organisation the tenant comes from.
+  const roles = rolesInOrg(roleGrants, homeOrgId);
+  const permissions = capabilitiesForRoles(roles);
   const orgContext = homeOrgId ? await resolveOrgContext(homeOrgId) : null;
   const isSuperAdmin = roles.includes('CONCESSION_SUPER_ADMIN');
   const hasAssemblyRole = roles.includes('ASSEMBLY_ADMIN');
@@ -135,7 +137,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.ZITADEL_CLIENT_ID,
       clientSecret: process.env.ZITADEL_CLIENT_SECRET,
       authorization: {
-        params: { scope: 'openid profile email offline_access' },
+        // resourceowner puts the user's home organisation into the tokens.
+        params: { scope: 'openid profile email offline_access urn:zitadel:iam:user:resourceowner' },
       },
     }),
   ],

@@ -6,6 +6,7 @@ import {
   capabilitiesForRoles,
   isHumanRole,
   parseRoleGrants,
+  rolesInOrg,
   ROLE_CAPABILITIES,
   ROLE_DEFINITIONS,
   type ProjectRole,
@@ -107,7 +108,7 @@ describe('iDARMS role model', () => {
     expect(targets).not.toContain('CONCESSION_SUPER_ADMIN');
   });
 
-  it('parses both ZITADEL role claim shapes and keeps org IDs', () => {
+  it('parses the generic and the iDARMS project role claims and keeps org IDs', () => {
     const grants = parseRoleGrants({
       'urn:zitadel:iam:org:project:roles': {
         CONCESSION_SUPER_ADMIN: {
@@ -121,7 +122,7 @@ describe('iDARMS role model', () => {
       'urn:zitadel:iam:org:project:roles:legacy': {
         'property:read': { '396250035848740867': 'assembly-a.localhost' },
       },
-    });
+    }, '395947172589207555');
 
     expect(grants).toEqual([
       {
@@ -140,5 +141,62 @@ describe('iDARMS role model', () => {
         orgDomain: 'assembly-a.localhost',
       },
     ]);
+  });
+});
+
+describe('role claims are pinned to the iDARMS project', () => {
+  const OUR_PROJECT = '395947172589207555';
+  const ORG_A = '396250035848740867';
+
+  it('ignores a role claim from another ZITADEL project', () => {
+    const grants = parseRoleGrants({
+      'urn:zitadel:iam:org:project:999999999999999999:roles': {
+        ASSEMBLY_ADMIN: { [ORG_A]: 'assembly-a.localhost' },
+      },
+    }, OUR_PROJECT);
+
+    expect(grants).toEqual([]);
+  });
+
+  it('accepts only the generic claim when no project id is given', () => {
+    const grants = parseRoleGrants({
+      'urn:zitadel:iam:org:project:roles': { FIELD_AGENT: { [ORG_A]: 'assembly-a.localhost' } },
+      [`urn:zitadel:iam:org:project:${OUR_PROJECT}:roles`]: {
+        ASSEMBLY_ADMIN: { [ORG_A]: 'assembly-a.localhost' },
+      },
+    });
+
+    expect(grants.map((grant) => grant.role)).toEqual(['FIELD_AGENT']);
+  });
+
+  it('ignores look-alike claim keys', () => {
+    const grants = parseRoleGrants({
+      [`urn:zitadel:iam:org:project:${OUR_PROJECT}:roles:extra`]: {
+        ASSEMBLY_ADMIN: { [ORG_A]: 'assembly-a.localhost' },
+      },
+      [`urn:zitadel:iam:org:project:x:${OUR_PROJECT}:roles`]: {
+        ASSEMBLY_ADMIN: { [ORG_A]: 'assembly-a.localhost' },
+      },
+    }, OUR_PROJECT);
+
+    expect(grants).toEqual([]);
+  });
+});
+
+describe('rolesInOrg', () => {
+  const grants = [
+    { role: 'FIELD_AGENT' as const, orgId: 'org-a' },
+    { role: 'ASSEMBLY_ADMIN' as const, orgId: 'org-b' },
+    { role: 'ASSEMBLY_VIEWER' as const, orgId: 'org-a' },
+  ];
+
+  it('returns only the roles granted in that organization', () => {
+    expect(rolesInOrg(grants, 'org-a')).toEqual(['FIELD_AGENT', 'ASSEMBLY_VIEWER']);
+    expect(rolesInOrg(grants, 'org-b')).toEqual(['ASSEMBLY_ADMIN']);
+  });
+
+  it('returns nothing for an unknown or missing organization', () => {
+    expect(rolesInOrg(grants, 'org-c')).toEqual([]);
+    expect(rolesInOrg(grants, undefined)).toEqual([]);
   });
 });

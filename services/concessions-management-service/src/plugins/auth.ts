@@ -3,12 +3,8 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config } from '../config';
 import { resolveOrgContext as resolveOrgContextFromDb } from '../modules/orgs/context';
 import { writeDeniedRequestAudit } from '../modules/audit/security';
-import { capabilitiesForRoles, parseRoleGrants } from '../lib/roles';
+import { capabilitiesForRoles, parseRoleGrants, rolesInOrg } from '../lib/roles';
 import type { AuthContext } from '../types/global';
-
-function parseRoles(payload: Record<string, unknown>): string[] {
-  return [...new Set(parseRoleGrants(payload).map((grant) => grant.role))];
-}
 
 function parsePermissions(value: unknown): string[] {
   if (typeof value === 'string') {
@@ -30,6 +26,8 @@ function extractBearer(request: FastifyRequest): string | null {
   if (scheme?.toLowerCase() !== 'bearer' || !token) return null;
   return token;
 }
+
+const RESOURCE_OWNER_CLAIM = 'urn:zitadel:iam:user:resourceowner:id';
 
 const PUBLIC_PATHS = ['/health/live', '/health/ready', '/metrics', '/docs', '/v1/org-context'];
 
@@ -56,9 +54,9 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
   });
 
   if (config.authMode === 'zitadel') {
-    if (!config.zitadelIssuer || !config.zitadelAudience || !config.zitadelJwksUri) {
+    if (!config.zitadelIssuer || !config.zitadelAudience || !config.zitadelJwksUri || !config.zitadelProjectId) {
       throw new Error(
-        'ZITADEL_ISSUER, ZITADEL_AUDIENCE and ZITADEL_JWKS_URI are required when AUTH_MODE=zitadel',
+        'ZITADEL_ISSUER, ZITADEL_AUDIENCE, ZITADEL_JWKS_URI and ZITADEL_PROJECT_ID are required when AUTH_MODE=zitadel',
       );
     }
 
@@ -79,27 +77,30 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
           audience: config.zitadelAudience,
         });
 
-        const roles = parseRoles(payload);
-        const roleGrants = parseRoleGrants(payload);
-        const permissions = [
-          ...new Set([
-            ...capabilitiesForRoles(roles),
-            ...parsePermissions(payload['urn:idarms:permissions']),
-          ]),
-        ];
-        const resourceOwnerId = typeof payload['urn:zitadel:iam:user:resourceowner:id'] === 'string'
-          ? payload['urn:zitadel:iam:user:resourceowner:id']
-          : undefined;
-        // Local ZITADEL access tokens can omit the resource-owner claim. For an
-        // Assembly Admin, the org in the ASSEMBLY_ADMIN role grant is the home
-        // org. Do not infer a Super Admin home org from grants because a Super
-        // Admin has grants in many assembly orgs.
-        const homeOrgId = resourceOwnerId
-          ?? roleGrants.find((grant) => grant.role === 'ASSEMBLY_ADMIN')?.orgId;
+        const roleGrants = parseRoleGrants(payload, config.zitadelProjectId);
+        const resourceOwner = payload[RESOURCE_OWNER_CLAIM];
+        const homeOrgId = typeof resourceOwner === 'string' && resourceOwner ? resourceOwner : undefined;
+        // The home organisation comes from ZITADEL only, never from role grants.
+        if (!homeOrgId) {
+          request.log.warn({
+            subject: typeof payload.sub === 'string' ? payload.sub : undefined,
+            clientId: typeof payload.client_id === 'string' ? payload.client_id : payload.azp,
+            missingClaim: RESOURCE_OWNER_CLAIM,
+            claimsPresent: Object.keys(payload),
+          }, 'Token refused: no home organisation claim (request the urn:zitadel:iam:user:resourceowner scope)');
+          return reply.code(401).send({
+            error: 'home_org_missing',
+            message: 'The access token has no home organisation claim',
+          });
+        }
+        // Permissions follow the organisation the tenant is resolved from; a
+        // role granted in another organisation does not apply here.
+        const roles = rolesInOrg(roleGrants, homeOrgId);
+        const permissions = capabilitiesForRoles(roles);
         const authorizedOrgIds = roleGrants.length > 0
           ? [...new Set(roleGrants.map((grant) => grant.orgId))]
-          : homeOrgId ? [homeOrgId] : [];
-        const context = homeOrgId ? await resolveOrgContextFromDb(app.prisma, homeOrgId) : null;
+          : [homeOrgId];
+        const context = await resolveOrgContextFromDb(app.prisma, homeOrgId);
         request.auth = {
           subject: typeof payload.sub === 'string' ? payload.sub : '',
           name: typeof payload.name === 'string'
@@ -129,6 +130,7 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
       }
     });
   } else {
+    app.log.warn('AUTH_MODE=disabled: identity is taken from x-idarms-* headers. Local development only.');
     app.addHook('onRequest', async (request) => {
       const headerPermissions = parsePermissions(request.headers['x-idarms-permissions']);
       const headerRoles = parsePermissions(request.headers['x-idarms-roles']);

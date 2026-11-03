@@ -17,7 +17,7 @@ async function requestHeaders(json = false): Promise<Record<string, string>> {
 
   if (session?.accessToken) {
     headers.authorization = `Bearer ${session.accessToken}`;
-  } else if (process.env.NODE_ENV !== 'production') {
+  } else if (appConfig.devHeaderAuth && process.env.NODE_ENV !== 'production') {
     headers['x-idarms-concession-id'] = appConfig.devConcessionId;
     headers['x-idarms-roles'] = appConfig.devRoles;
     headers['x-idarms-actor-id'] = appConfig.devActorId;

@@ -8,7 +8,7 @@ const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().positive().default(3100),
   DATABASE_URL: z.string().min(1),
-  AUTH_MODE: z.enum(['disabled', 'zitadel']).default('disabled'),
+  AUTH_MODE: z.enum(['disabled', 'zitadel']).default('zitadel'),
   ZITADEL_ISSUER: z.string().optional(),
   ZITADEL_AUDIENCE: z.string().optional(),
   ZITADEL_JWKS_URI: z.string().optional(),
@@ -16,7 +16,7 @@ const envSchema = z.object({
   ZITADEL_PROVISIONING_URL: z.string().url().default('http://localhost:8080'),
   ZITADEL_PROVISIONING_KEY_PATH: z.string().optional(),
   ZITADEL_PROVISIONING_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
-  ZITADEL_PROJECT_ID: z.string().optional(),
+  ZITADEL_PROJECT_ID: z.string().regex(/^\d+$/, 'ZITADEL_PROJECT_ID must be the numeric ZITADEL project id').optional(),
   ZITADEL_PORTFOLIO_ORG_ID: z.string().optional(),
   PLATFORM_ADMIN_USER_ID: z.string().optional(),
   ACCESS_DIRECTORY_CACHE_TTL_MS: z.coerce.number().int().positive().default(15_000),
@@ -36,8 +36,19 @@ if (!parsed.success) {
 
 const env = parsed.data;
 
-if (env.NODE_ENV === 'production' && env.AUTH_MODE === 'disabled') {
-  throw new Error('AUTH_MODE=disabled is forbidden when NODE_ENV=production');
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+// Header-based identity is for local work only: never in production, and in
+// development only when no other machine can reach the service.
+if (env.AUTH_MODE === 'disabled') {
+  if (env.NODE_ENV === 'production') {
+    throw new Error('AUTH_MODE=disabled is forbidden when NODE_ENV=production');
+  }
+  if (env.NODE_ENV === 'development' && !LOOPBACK_HOSTS.has(env.HOST)) {
+    throw new Error(
+      `AUTH_MODE=disabled requires a loopback HOST (127.0.0.1, localhost or ::1); got ${env.HOST}`,
+    );
+  }
 }
 
 const provisioningUrl = new URL(env.ZITADEL_PROVISIONING_URL);
