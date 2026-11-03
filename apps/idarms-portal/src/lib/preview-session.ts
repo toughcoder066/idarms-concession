@@ -57,20 +57,26 @@ export interface PreviewSession {
 }
 
 /**
- * Reads the existing NextAuth JWT session cookie. This is a local decrypt only;
- * it never refreshes a token, calls ZITADEL, or changes the session.
+ * Decrypts the Auth.js JWT session cookie. A local decrypt only; it never
+ * refreshes a token, calls ZITADEL, or changes the session.
  */
+export async function decodeAuthSessionCookie(
+  store?: Awaited<ReturnType<typeof cookies>>,
+): Promise<Record<string, unknown> | null> {
+  const cookie = sessionCookie(store ?? await cookies());
+  if (!cookie) return null;
+  try {
+    return await decode({ token: cookie.token, secret: secret(), salt: cookie.name }) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function decodeSession(
   store: Awaited<ReturnType<typeof cookies>>,
 ): Promise<PreviewSession | null> {
-  const cookie = sessionCookie(store);
-  if (!cookie) return null;
   try {
-    const decoded = await decode({
-      token: cookie.token,
-      secret: secret(),
-      salt: cookie.name,
-    });
+    const decoded = await decodeAuthSessionCookie(store);
     if (!decoded) return null;
     const expiresAt = typeof decoded.expiresAt === 'number'
       ? decoded.expiresAt

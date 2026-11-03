@@ -103,9 +103,11 @@ and restarts cleanly, while a fully provisioned assembly returns
 creation attempts to delete the org and the registry row; if ZITADEL deletion fails,
 the row is marked `FAILED` and the org ID is retained for manual cleanup/retry.
 
-The first admin invite creates a ZITADEL user in `USER_STATE_INITIAL`. Local
-development has no SMTP, so the invite link/code must be delivered through the local
-ZITADEL console or a test harness.
+The first admin invite creates a ZITADEL user without a password and emails a
+ZITADEL invite code whose link opens the portal's `/invite/accept` page (`PORTAL_URL`,
+ADR-0004); the user is created with `returnCode`, so ZITADEL sends no email of its own.
+Resending an invite issues a new code with the same link. Local development has no
+SMTP, so the invite email is not delivered until ZITADEL is given an SMTP server.
 
 `GET /v1/access-directory/assemblies` derives the caller's assembly set from live
 per-org user grants, not the cached token role claim. Results are cached per user and

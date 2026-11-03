@@ -18,6 +18,7 @@ const envSchema = z.object({
   ZITADEL_PROVISIONING_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   ZITADEL_PROJECT_ID: z.string().regex(/^\d+$/, 'ZITADEL_PROJECT_ID must be the numeric ZITADEL project id').optional(),
   ZITADEL_PORTFOLIO_ORG_ID: z.string().optional(),
+  PORTAL_URL: z.string().url().default('http://localhost:3000'),
   PLATFORM_ADMIN_USER_ID: z.string().optional(),
   ACCESS_DIRECTORY_CACHE_TTL_MS: z.coerce.number().int().positive().default(15_000),
   RABBITMQ_URL: z.string().default('amqp://idarms:idarms@127.0.0.1:5672'),
@@ -51,6 +52,11 @@ if (env.AUTH_MODE === 'disabled') {
   }
 }
 
+// Invitation emails link here, so it must be the real portal over HTTPS in production.
+if (env.NODE_ENV === 'production' && new URL(env.PORTAL_URL).protocol !== 'https:') {
+  throw new Error('PORTAL_URL must use https when NODE_ENV=production');
+}
+
 const provisioningUrl = new URL(env.ZITADEL_PROVISIONING_URL);
 if (!['localhost', '127.0.0.1', '[::1]'].includes(provisioningUrl.hostname)) {
   throw new Error(
@@ -75,6 +81,7 @@ export const config = {
   zitadelProvisioningTimeoutMs: env.ZITADEL_PROVISIONING_TIMEOUT_MS,
   zitadelProjectId: env.ZITADEL_PROJECT_ID,
   zitadelPortfolioOrgId: env.ZITADEL_PORTFOLIO_ORG_ID,
+  portalUrl: env.PORTAL_URL,
   platformAdminUserId: env.PLATFORM_ADMIN_USER_ID,
   accessDirectoryCacheTtlMs: env.ACCESS_DIRECTORY_CACHE_TTL_MS,
   rabbitmqUrl: env.RABBITMQ_URL,

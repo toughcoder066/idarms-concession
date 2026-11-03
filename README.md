@@ -261,28 +261,32 @@ semantics.
 
 ### Portal login
 
-The portal uses Auth.js (NextAuth v5) with the Zitadel provider. After `pnpm zitadel:bootstrap`,
-set `apps/idarms-portal/.env.local`:
+The portal hosts its own login screens and authenticates through ZITADEL's Session API
+on the server; the browser never visits ZITADEL (ADR-0004). After `pnpm zitadel:bootstrap`
+(or, on an existing instance, `pnpm zitadel:login-client`), set `apps/idarms-portal/.env.local`:
 
 ```bash
 AUTH_SECRET=<openssl rand -base64 32>
+AUTH_URL=http://localhost:3000                  # portal origin; https in production
 ZITADEL_ISSUER=http://localhost:8080
 ZITADEL_CLIENT_ID=<web app client id>          # printed by bootstrap
 ZITADEL_CLIENT_SECRET=<web app client secret>  # printed by bootstrap
+ZITADEL_PROJECT_ID=<iDARMS project id>
+ZITADEL_LOGIN_CLIENT_KEY_PATH=<repo>/.secrets/zitadel-portal-login-client.json
 ```
 
-The bootstrap also applies iDARMS's teal and neutral palette to ZITADEL's hosted login
-and configures the iDARMS project to use that organization branding. Users enter credentials
-on ZITADEL's hosted sign-in page; the portal never receives their passwords.
+`pnpm zitadel:login-client` creates the `idarms-portal-login` machine user with the
+instance role `IAM_LOGIN_CLIENT`, writes its key to `.secrets/` (gitignored, never
+printed) and points the `idarms-portal` app's login page at the portal.
 
 Run `pnpm --filter @idarms/idarms-portal dev` and open <http://localhost:3000/login>.
-Unauthenticated visitors are redirected straight to ZITADEL's branded username/password
-form; the portal also proxies ZITADEL's login UI assets without applying portal auth
-middleware to them. After sign-in, users return to the portal dashboard. For local
-development, use `concession-admin` / `Password1!`. Signing out clears the portal session
-and ends the ZITADEL SSO session before returning to the public signed-out page. If the
-portal is deployed at a non-local URL, set `PORTAL_URL` when running
-`pnpm zitadel:bootstrap` so ZITADEL registers the correct logout callback.
+The portal's own pages cover sign-in (`/login`), forgot and reset password
+(`/password/forgot`, `/password/reset`), a password change ZITADEL requires
+(`/password/change`) and accepting an invitation (`/invite/accept`). After sign-in,
+users return to the page they asked for (or the dashboard). For local development, use
+`concession-admin` / `Password1!`. Signing out ends the ZITADEL session and revokes the
+refresh token on the server, then shows the public signed-out page. The local stack has no
+SMTP, so reset and invitation emails are not delivered until ZITADEL is given an SMTP server.
 
 The access token carries:
 
@@ -366,8 +370,8 @@ Local login fixtures:
 
 The AMA fixture is an active `ASSEMBLY_ADMIN` in the AMA org created for local UI testing;
 the onboarding saga's optional first-admin invite creates an `INITIAL` user instead, which
-must be activated before it can sign in. ZITADEL keeps its SSO session across a portal
-sign-out, so switch personas with RP-initiated logout or a private browser window.
+must accept its invitation at `/invite/accept` before it can sign in. Portal sign-out ends
+the ZITADEL session, so switching personas only needs a sign-out and a new sign-in.
 
 The concessions service must validate real portal tokens for these screens:
 

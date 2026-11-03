@@ -47,6 +47,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     baseUrl: config.zitadelProvisioningUrl,
     keyPath: config.zitadelProvisioningKeyPath,
     timeoutMs: config.zitadelProvisioningTimeoutMs,
+    portalUrl: config.portalUrl,
   }));
   app.addHook('onClose', async () => {
     await prisma.$disconnect();

@@ -498,6 +498,119 @@ a {
   line-height: 1.6;
 }
 
+/* Portal-hosted login pages (ADR-0004): login, password reset/change, invitation. */
+.auth-page {
+  display: grid;
+  min-height: 100vh;
+  padding: 24px 16px;
+  place-items: center;
+  background: var(--canvas);
+}
+
+.auth-card {
+  width: min(100%, 420px);
+  padding: 34px 32px 30px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 26px;
+  color: var(--ink);
+}
+
+.auth-brand-mark {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  place-items: center;
+  border-radius: 13px;
+  color: #fff;
+  background: var(--brand);
+}
+
+.auth-card h1 {
+  margin-bottom: 8px;
+  font-size: 24px;
+  letter-spacing: -0.7px;
+}
+
+.auth-card > .muted {
+  margin-bottom: 22px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-form .field input {
+  min-height: 42px;
+  font-size: 13px;
+}
+
+.auth-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.auth-submit {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.auth-link {
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.auth-link:hover {
+  color: var(--brand-dark);
+  text-decoration: underline;
+}
+
+.auth-alert {
+  margin: 0 0 18px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.auth-form .auth-alert {
+  margin: 0;
+}
+
+.auth-alert-error {
+  color: #8f2f37;
+  background: #fdeef0;
+}
+
+.auth-alert-success {
+  color: var(--brand-dark);
+  background: var(--brand-soft);
+}
+
+.auth-footer {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
 .page-heading {
   display: flex;
   align-items: flex-end;

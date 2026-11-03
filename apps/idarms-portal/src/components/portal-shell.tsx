@@ -173,7 +173,7 @@ export function PortalShell({
     ...baseGroups.slice(1),
   ];
 
-  if (pathname === '/login') {
+  if (pathname === '/login' || pathname.startsWith('/password/') || pathname.startsWith('/invite/')) {
     return <>{children}</>;
   }
 

@@ -8,6 +8,8 @@ export interface ZitadelProvisioningClientOptions {
   keyPath?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** Invitation links point here (`/invite/accept`), never at ZITADEL's screens (ADR-0004). */
+  portalUrl?: string;
 }
 
 export interface ZitadelOrganization {
@@ -159,6 +161,7 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
   private readonly keyPath?: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly portalUrl: string;
   private machineKey?: MachineKey;
   private privateKey?: KeyLike;
   private cachedToken?: CachedToken;
@@ -168,6 +171,17 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
     this.keyPath = options.keyPath;
     this.timeoutMs = options.timeoutMs ?? 15_000;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.portalUrl = (options.portalUrl ?? 'http://localhost:3000').replace(/\/+$/, '');
+  }
+
+  /** ZITADEL emails the invite code with a link to the portal's own accept page. */
+  private inviteCodeRequest() {
+    return {
+      sendCode: {
+        urlTemplate: `${this.portalUrl}/invite/accept?userId={{.UserID}}&code={{.Code}}&orgId={{.OrgID}}`,
+        applicationName: 'iDARMS',
+      },
+    };
   }
 
   async createOrganization(name: string): Promise<ZitadelOrganization> {
@@ -376,17 +390,24 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
     phone?: string;
   }): Promise<ZitadelInvitedUser> {
     try {
-      const body = await this.request('POST', '/management/v1/users/human', {
+      // returnCode keeps ZITADEL from sending its own verification email; the
+      // invite code below is the only email the new staff member receives.
+      const body = await this.request('POST', '/v2/users/human', {
         orgId: input.orgId,
         body: {
-          userName: input.email,
-          profile: { firstName: input.firstName, lastName: input.lastName },
-          email: { email: input.email, isEmailVerified: false },
-          ...(input.phone ? { phone: { phone: input.phone } } : {}),
+          username: input.email,
+          organization: { orgId: input.orgId },
+          profile: { givenName: input.firstName, familyName: input.lastName },
+          email: { email: input.email, returnCode: {} },
+          ...(input.phone ? { phone: { phone: input.phone, returnCode: {} } } : {}),
         },
       });
       const userId = String(body?.userId ?? '');
       if (!userId) throw new ZitadelProvisioningError('ZITADEL did not return a user ID.', 502, undefined, body);
+      await this.request('POST', `/v2/users/${encodeURIComponent(userId)}/invite_code`, {
+        orgId: input.orgId,
+        body: this.inviteCodeRequest(),
+      });
       return { userId, userName: input.email };
     } catch (error) {
       if (error instanceof ZitadelProvisioningError && error.status === 409) {
@@ -573,7 +594,7 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
   async resendInvitation(input: { orgId: string; userId: string }): Promise<void> {
     await this.request('POST', `/v2/users/${encodeURIComponent(input.userId)}/invite_code`, {
       orgId: input.orgId,
-      body: {},
+      body: this.inviteCodeRequest(),
     });
   }
 

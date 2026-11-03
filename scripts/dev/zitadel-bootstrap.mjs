@@ -12,6 +12,7 @@
 import { execSync } from 'node:child_process';
 import { createSign } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { ensurePortalLogin, LOGIN_CLIENT_KEY_PATH } from './zitadel-login-client.mjs';
 
 const require = createRequire(import.meta.url);
 const { ROLE_DEFINITIONS, PROJECT_ROLE_KEYS } = require('../../packages/contracts/dist/roles.js');
@@ -464,7 +465,11 @@ async function main() {
     console.log('  token lifetimes already match');
   }
 
+  console.log('\n9. Portal login client (ADR-0004)');
+  await ensurePortalLogin(token);
+
   console.log('\nSummary — add to apps/idarms-portal/.env.local:');
+  console.log(`  ZITADEL_LOGIN_CLIENT_KEY_PATH=${LOGIN_CLIENT_KEY_PATH}`);
   console.log('  AUTH_SECRET=<openssl rand -base64 32>');
   console.log(`  ZITADEL_ISSUER=${BASE}`);
   console.log(`  ZITADEL_CLIENT_ID=${webApp.clientId}`);
