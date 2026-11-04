@@ -23,7 +23,7 @@ export const appConfig = {
   devOrgId: process.env.IDARMS_ORG_ID ?? '',
   devAuthorizedOrgIds: process.env.IDARMS_AUTHORIZED_ORG_IDS ?? '',
   devRoles: process.env.IDARMS_DEV_ROLES ?? '',
-  devScopeLevel: process.env.IDARMS_SCOPE_LEVEL ?? 'PORTFOLIO',
+  devScopeLevel: process.env.IDARMS_SCOPE_LEVEL ?? 'CONCESSION',
   devActorId: process.env.IDARMS_ACTOR_ID ?? 'dev-actor',
   serviceBaseUrls: {
     ratepayers: process.env.NEXT_PUBLIC_RATEPAYER_API_URL ?? 'http://localhost:3020/v1',

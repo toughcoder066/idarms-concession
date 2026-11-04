@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { config } from '../../config';
 import { requireAny } from '../../plugins/auth';
 import { getAccessibleAssemblies } from '../access-directory/service';
+import { concessionOrgId } from '../orgs/context';
 import { resolveStaffAccess, StaffAccessError } from '../staff/access';
 import { writeDeniedRequestAudit } from './security';
 import {
@@ -11,7 +12,7 @@ import {
   AuditQueryError,
   listAssemblyAudit,
   listAssemblyAuditActors,
-  listPortfolioAudit,
+  listConcessionAudit,
   type AuditDeps,
   type AuditFilters,
 } from './service';
@@ -110,19 +111,25 @@ async function sendError(
   });
 }
 
-function auditDeps(
+/** The caller's concession org comes from the org registry; concession-wide users live there. */
+async function concessionOrgOf(app: FastifyInstance, concessionId: string | undefined): Promise<string | undefined> {
+  return concessionId ? (await concessionOrgId(app.prisma, concessionId)) ?? undefined : undefined;
+}
+
+async function auditDeps(
   app: FastifyInstance,
+  concessionId: string | undefined,
   assembly: {
     id: string;
     assemblyName: string;
     assemblyCode: string;
     orgId: string;
   },
-): AuditDeps {
+): Promise<AuditDeps> {
   return {
     prisma: app.prisma,
     zitadel: app.zitadelProvisioning,
-    portfolioOrgId: config.zitadelPortfolioOrgId ?? '',
+    concessionOrgId: await concessionOrgOf(app, concessionId),
     assemblyOrgId: assembly.orgId,
     assemblyId: assembly.id,
     assemblyName: assembly.assemblyName,
@@ -142,7 +149,7 @@ export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
     try {
       const access = await resolveStaffAccess(app.prisma, request.auth, params.assemblyId);
       const data = await listAssemblyAudit(
-        auditDeps(app, {
+        await auditDeps(app, request.auth.concessionId, {
           id: access.assembly.id,
           assemblyName: access.assembly.assemblyName,
           assemblyCode: access.assembly.assemblyCode,
@@ -167,7 +174,7 @@ export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
     try {
       const access = await resolveStaffAccess(app.prisma, request.auth, params.assemblyId);
       const data = await listAssemblyAuditActors(
-        auditDeps(app, {
+        await auditDeps(app, request.auth.concessionId, {
           id: access.assembly.id,
           assemblyName: access.assembly.assemblyName,
           assemblyCode: access.assembly.assemblyCode,
@@ -181,8 +188,8 @@ export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get('/v1/portfolio/audit', {
-    preHandler: requireAny(['portfolio:audit:read'], ['CONCESSION_SUPER_ADMIN']),
+  app.get('/v1/concession/audit', {
+    preHandler: requireAny(['concession:audit:read'], ['CONCESSION_SUPER_ADMIN']),
   }, async (request, reply) => {
     const query = parseOrReply(auditQuerySchema, request.query ?? {}, reply);
     if (!query) return;
@@ -191,7 +198,7 @@ export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
     if (!config.zitadelProjectId) {
       return reply.code(503).send({
         error: 'provisioning_not_configured',
-        message: 'ZITADEL_PROJECT_ID is required for the portfolio audit ledger.',
+        message: 'ZITADEL_PROJECT_ID is required for the concession audit ledger.',
       });
     }
 
@@ -202,10 +209,10 @@ export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
         concessionId: request.auth.concessionId,
         ttlMs: config.accessDirectoryCacheTtlMs,
       });
-      const data = await listPortfolioAudit({
+      const data = await listConcessionAudit({
         prisma: app.prisma,
         zitadel: app.zitadelProvisioning,
-        portfolioOrgId: config.zitadelPortfolioOrgId ?? '',
+        concessionOrgId: await concessionOrgOf(app, request.auth.concessionId),
         actorId: request.auth.subject,
         accessibleAssemblies,
       }, filters);

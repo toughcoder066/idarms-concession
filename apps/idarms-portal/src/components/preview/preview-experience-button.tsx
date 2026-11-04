@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Eye, LockKeyhole, X } from 'lucide-react';
 import { PREVIEW_PERSONAS } from '@idarms/contracts';
-import { startPreviewAction } from '@/app/preview/start-actions';
+import { startPreviewAction } from '@/app/(portal)/preview/start-actions';
 
 export function PreviewExperienceButton() {
   const [open, setOpen] = useState(false);

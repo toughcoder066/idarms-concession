@@ -1,6 +1,13 @@
 export interface AuthFormState {
   error?: string;
   sent?: boolean;
+  /**
+   * Where the browser goes next with a full page load. Set when a sign-in
+   * completes: the target is the Auth.js callback, a route handler that sets
+   * the session cookie, so a client-side (soft) navigation would keep the
+   * signed-out page and layout on screen.
+   */
+  redirectTo?: string;
 }
 
 export const MESSAGES = {

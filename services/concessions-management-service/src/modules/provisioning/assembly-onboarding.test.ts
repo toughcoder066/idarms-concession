@@ -11,12 +11,15 @@ import type { ZitadelProvisioningClient } from './zitadel-client';
 const assemblyId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const concessionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const projectId = 'project-1';
-const portfolioOrgId = 'portfolio-1';
+const projectOwnerOrgId = 'zitadel-infra-1';
+const concessionOrgId = 'concession-org-1';
 const assemblyName = 'Accra Metropolitan Assembly';
 const firstAdmin = { email: 'admin@assembly.local', firstName: 'Ada', lastName: 'Admin' };
 
 interface FakePrismaOptions {
   failRegistry?: boolean;
+  /** No CONCESSION-scoped org registered for the concession. */
+  noConcessionOrg?: boolean;
 }
 
 function createFakePrisma(options: FakePrismaOptions = {}) {
@@ -28,6 +31,10 @@ function createFakePrisma(options: FakePrismaOptions = {}) {
       zitadelOrgId: null as string | null,
     },
     registry: new Map<string, any>(),
+    // The CONCESSION-scoped org, kept apart from the assembly rows the tests count.
+    concessionOrg: options.noConcessionOrg ? null : {
+      orgId: concessionOrgId, concessionId, assemblyId: null, scope: 'CONCESSION', status: 'ACTIVE',
+    },
     onboarding: new Map<string, any>(),
     audits: [] as any[],
   };
@@ -72,6 +79,10 @@ function createFakePrisma(options: FakePrismaOptions = {}) {
           return [...state.registry.values()].find((row) => row.assemblyId === where.assemblyId) ?? null;
         }
         return null;
+      },
+      findFirst: async ({ where }: any) => {
+        const row = state.concessionOrg;
+        return row && Object.entries(where).every(([key, value]) => (row as any)[key] === value) ? row : null;
       },
       findMany: async ({ where }: any) => [...state.registry.values()].filter((row) =>
         (!where?.scope || row.scope === where.scope)
@@ -187,7 +198,7 @@ function createFakeZitadel(options: FakeZitadelOptions = {}) {
         id: `grant-${userId}`,
         userId,
         roleKeys: ['CONCESSION_SUPER_ADMIN'],
-        orgId: portfolioOrgId,
+        orgId: concessionOrgId,
         projectId,
       }))),
     inviteHumanUser: vi.fn(async () => {
@@ -219,7 +230,7 @@ function makeDeps(options: {
     deps: {
       prisma,
       zitadel: client,
-      config: { projectId, portfolioOrgId },
+      config: { projectId, projectOwnerOrgId },
       audit,
       invalidateAccessDirectory: invalidate,
     },
@@ -235,7 +246,7 @@ function actor(role = 'CONCESSION_SUPER_ADMIN') {
     actorRole: role,
     requestId: 'request-1',
     expectedConcessionId: concessionId,
-    portfolioAuthorized: true,
+    concessionAuthorized: true,
   };
 }
 
@@ -261,7 +272,7 @@ describe('onboardAssembly', () => {
 
     const projectGrant = calls.find((call) => call.method === 'ensureProjectGrant');
     expect(projectGrant?.args).toMatchObject({
-      portfolioOrgId,
+      projectOwnerOrgId,
       projectId,
       grantedOrgId: 'org-1',
     });
@@ -467,7 +478,7 @@ describe('onboardAssembly', () => {
     const deps = {
       prisma,
       zitadel: client,
-      config: { projectId, portfolioOrgId },
+      config: { projectId, projectOwnerOrgId },
       audit: async () => undefined,
       invalidateAccessDirectory: () => undefined,
     };
@@ -488,13 +499,26 @@ describe('onboardAssembly', () => {
     }
   });
 
-  it('rejects a super admin whose grant is not portfolio-scoped without touching ZITADEL', async () => {
+  it('rejects a super admin who is not signed in at concession level without touching ZITADEL', async () => {
     const { deps, calls } = makeDeps();
     await expect(onboardAssembly(deps, {
       assemblyId,
-      actor: { ...actor(), portfolioAuthorized: false },
+      actor: { ...actor(), concessionAuthorized: false },
     })).rejects.toMatchObject({ code: 'forbidden', statusCode: 403 });
     expect(calls).toHaveLength(0);
+  });
+
+  it('refuses to onboard until the concession org is registered, without touching ZITADEL', async () => {
+    const { deps, calls } = makeDeps({ prisma: { noConcessionOrg: true } });
+    await expect(onboardAssembly(deps, { assemblyId, actor: actor() }))
+      .rejects.toMatchObject({ code: 'concession_org_unregistered', statusCode: 409 });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('looks up super admins in the concession org', async () => {
+    const { deps } = makeDeps();
+    await onboardAssembly(deps, { assemblyId, firstAdmin, actor: actor() });
+    expect(deps.zitadel.listProjectRoleHolders).toHaveBeenCalledWith(expect.objectContaining({ orgId: concessionOrgId }));
   });
 
   it('rejects a concurrent onboarding attempt instead of creating a duplicate org', async () => {

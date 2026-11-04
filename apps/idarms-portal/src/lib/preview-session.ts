@@ -78,6 +78,7 @@ async function decodeSession(
   try {
     const decoded = await decodeAuthSessionCookie(store);
     if (!decoded) return null;
+    if (decoded.error) return null;
     const expiresAt = typeof decoded.expiresAt === 'number'
       ? decoded.expiresAt
       : typeof decoded.exp === 'number' ? decoded.exp : null;

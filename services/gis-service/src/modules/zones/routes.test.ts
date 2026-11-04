@@ -44,7 +44,7 @@ beforeEach(() => {
 const superAdmin = {
   'x-idarms-concession-id': CONCESSION_A,
   'x-idarms-roles': 'CONCESSION_SUPER_ADMIN',
-  'x-idarms-scope-level': 'PORTFOLIO',
+  'x-idarms-scope-level': 'CONCESSION',
 };
 
 describe('GIS zone tenant scope (ADR-0002)', () => {

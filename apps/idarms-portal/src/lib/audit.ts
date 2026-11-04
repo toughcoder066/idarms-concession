@@ -35,7 +35,7 @@ export interface AuditActorOption {
   lastActionAt: string | null;
 }
 
-export interface PortfolioAssemblyActivity {
+export interface ConcessionAssemblyActivity {
   assemblyId: string;
   assemblyName: string | null;
   assemblyCode: string | null;
@@ -43,7 +43,7 @@ export interface PortfolioAssemblyActivity {
   lastActionAt: string | null;
 }
 
-export interface PortfolioAuditSummary {
+export interface ConcessionAuditSummary {
   actionsThisWeek: number;
   actionsThisMonth: number;
   assembliesActedOn: number;
@@ -51,9 +51,9 @@ export interface PortfolioAuditSummary {
   pendingInvitationsOlderThan7Days: number;
 }
 
-export interface PortfolioAuditPage extends AuditPage {
-  assemblies: PortfolioAssemblyActivity[];
-  summary: PortfolioAuditSummary;
+export interface ConcessionAuditPage extends AuditPage {
+  assemblies: ConcessionAssemblyActivity[];
+  summary: ConcessionAuditSummary;
 }
 
 export interface AuditFilterState {

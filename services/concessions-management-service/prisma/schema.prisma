@@ -81,7 +81,10 @@ model IdempotencyRecord {
 }
 
 // ============================ Organization registry ============================
-// Maps a ZITADEL organization to the iDARMS portfolio/assembly context.
+// Maps a ZITADEL organization to the iDARMS CONCESSION or ASSEMBLY scope (registry, ADR-0003).
+// scope is CONCESSION (assemblyId null, one per concession) or ASSEMBLY (assemblyId set).
+// Both rules are enforced in the database (migration 20261103120000). ZITADEL's default
+// (infrastructure) org is never registered.
 model ZitadelOrgContext {
   orgId         String   @id @map("org_id")
   concessionId  String   @map("concession_id") @db.Uuid

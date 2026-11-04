@@ -30,12 +30,12 @@ describe('iDARMS role model', () => {
     expect(keys.filter(isHumanRole)).toHaveLength(8);
   });
 
-  it('gives portfolio capabilities only to CONCESSION_SUPER_ADMIN', () => {
-    expect(ROLE_CAPABILITIES.CONCESSION_SUPER_ADMIN).toContain('portfolio:reporting:read');
-    expect(ROLE_CAPABILITIES.CONCESSION_SUPER_ADMIN).toContain('portfolio:target:manage');
-    expect(ROLE_CAPABILITIES.CONCESSION_SUPER_ADMIN).toContain('portfolio:audit:read');
+  it('gives concession-wide capabilities only to CONCESSION_SUPER_ADMIN', () => {
+    expect(ROLE_CAPABILITIES.CONCESSION_SUPER_ADMIN).toContain('concession:reporting:read');
+    expect(ROLE_CAPABILITIES.CONCESSION_SUPER_ADMIN).toContain('concession:target:manage');
+    expect(ROLE_CAPABILITIES.CONCESSION_SUPER_ADMIN).toContain('concession:audit:read');
     expect(ROLE_CAPABILITIES.CONCESSION_SUPER_ADMIN).toContain('directory:manage');
-    expect(ROLE_CAPABILITIES.ASSEMBLY_ADMIN).not.toContain('portfolio:reporting:read');
+    expect(ROLE_CAPABILITIES.ASSEMBLY_ADMIN).not.toContain('concession:reporting:read');
   });
 
   it('keeps publish/approve on ASSEMBLY_ADMIN only', () => {
@@ -112,7 +112,7 @@ describe('iDARMS role model', () => {
     const grants = parseRoleGrants({
       'urn:zitadel:iam:org:project:roles': {
         CONCESSION_SUPER_ADMIN: {
-          '395945616116613123': 'portfolio.localhost',
+          '395945616116613123': 'concession.localhost',
           '396250035848740867': 'assembly-a.localhost',
         },
       },
@@ -128,7 +128,7 @@ describe('iDARMS role model', () => {
       {
         role: 'CONCESSION_SUPER_ADMIN',
         orgId: '395945616116613123',
-        orgDomain: 'portfolio.localhost',
+        orgDomain: 'concession.localhost',
       },
       {
         role: 'CONCESSION_SUPER_ADMIN',

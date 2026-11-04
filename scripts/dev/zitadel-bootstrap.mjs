@@ -1,7 +1,15 @@
 // Config-as-code bootstrap for the local iDARMS ZITADEL instance.
 // Creates the iDARMS project, API + web apps, the canonical human/machine
-// project roles, human users, and user grants. It also retires the obsolete
-// flat permission roles and the legacy idarmsContext token action.
+// project roles, the dedicated concession organisation, its users and user
+// grants, and registers that organisation in the iDARMS org registry. It also
+// retires the obsolete flat permission roles and the legacy idarmsContext action.
+//
+// Organisations (ADR-0003):
+//   - ZITADEL's default org is identity infrastructure: it owns the project,
+//     apps and machine users. It is never an iDARMS tenant and holds no iDARMS staff.
+//   - The concession org (CONCESSION scope, no assembly) is the home org of
+//     concession-wide users such as the Concession Super Admin.
+//   - Assembly orgs (ASSEMBLY scope) are created by assembly onboarding, not here.
 //
 // The role/capability model lives in packages/contracts/src/roles.ts. This
 // script reads the compiled model so the bootstrap and application code cannot
@@ -12,13 +20,18 @@
 import { execSync } from 'node:child_process';
 import { createSign } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ensurePortalLogin, LOGIN_CLIENT_KEY_PATH } from './zitadel-login-client.mjs';
 
 const require = createRequire(import.meta.url);
-const { ROLE_DEFINITIONS, PROJECT_ROLE_KEYS } = require('../../packages/contracts/dist/roles.js');
+const { ROLE_DEFINITIONS, PROJECT_ROLE_KEYS, HUMAN_ROLE_KEYS } = require('../../packages/contracts/dist/roles.js');
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const BASE = process.env.ZITADEL_URL ?? 'http://localhost:8080';
 const PROJECT_NAME = 'iDARMS';
+// The dedicated iDARMS concession organisation. Found by name, created once.
+const CONCESSION_ORG_NAME = process.env.IDARMS_CONCESSION_ORG_NAME ?? 'iDARMS Concession';
 const MACHINE_USER_ROLE = 'CROIP_M2M';
 const PORTAL_URLS = [...new Set([
   'http://localhost:3000',
@@ -38,20 +51,15 @@ const LOGIN_BRANDING = {
   themeMode: 'THEME_MODE_AUTO',
 };
 
-const USERS = [
+// Concession-wide test users, created in the concession org. Assembly staff
+// (field agents and the rest) are invited into their assembly org instead.
+const CONCESSION_USERS = [
   {
     userName: 'concession-admin',
     givenName: 'Concession',
     familyName: 'Admin',
     email: 'concession-admin@idarms.local',
     roles: ['CONCESSION_SUPER_ADMIN'],
-  },
-  {
-    userName: 'field-agent',
-    givenName: 'Field',
-    familyName: 'Agent',
-    email: 'field-agent@idarms.local',
-    roles: ['FIELD_AGENT'],
   },
 ];
 
@@ -197,8 +205,9 @@ async function main() {
   const token = await obtainManagementToken(machineKey);
   console.log('  management token acquired');
 
-  console.log('\n0. Org');
+  console.log('\n0. Infrastructure org (ZITADEL default org; never an iDARMS tenant)');
   const myOrg = await api(token, 'GET', '/management/v1/orgs/me');
+  // orgId is this infrastructure org: it owns the project, apps and machine users.
   const orgId = myOrg?.org?.id;
   if (typeof orgId !== 'string' || !orgId) {
     throw new Error('ZITADEL did not return the organization ID required to configure login branding.');
@@ -333,17 +342,29 @@ async function main() {
   }
   console.log(`  ${ROLE_DEFINITIONS.length} canonical roles present`);
 
-  console.log('\n4. Users and grants');
-  const existingUsers = await listUsers(token);
-  const usersByLogin = new Map(existingUsers.map((u) => [u.userName, u]));
-  for (const spec of USERS) {
-    let user = usersByLogin.get(spec.userName);
+  console.log('\n3.1 Concession organisation');
+  const concessionOrgId = await ensureConcessionOrg(token, orgId);
+  await ensureConcessionProjectGrant(token, projectId, orgId, concessionOrgId);
+
+  console.log('\n4. Concession users and grants');
+  const infraUsers = await listUsers(token, null, orgId);
+  const concessionUsers = await listUsers(token, null, concessionOrgId);
+  for (const spec of CONCESSION_USERS) {
+    let user = concessionUsers.find((u) => u.userName === spec.userName);
     // Repair users created by an older bootstrap version that used the wrong
     // `password` field (they end up stuck in USER_STATE_INITIAL and cannot log in).
     if (user && user.state === 'USER_STATE_INITIAL') {
-      await api(token, 'DELETE', `/management/v1/users/${user.id}`);
+      await api(token, 'DELETE', `/management/v1/users/${user.id}`, undefined, concessionOrgId);
       console.log(`  removed uninitialized user ${spec.userName}, will recreate`);
       user = null;
+    }
+    // Older bootstraps created this user in the infrastructure org. ZITADEL cannot
+    // move a user between orgs and user names are unique on this instance, so the
+    // old local test user is deleted and recreated in the concession org.
+    const misplaced = infraUsers.find((u) => u.userName === spec.userName);
+    if (misplaced && !user) {
+      await api(token, 'DELETE', `/management/v1/users/${misplaced.id}`, undefined, orgId);
+      console.log(`  deleted ${spec.userName} from the infrastructure org (${misplaced.id}); recreating it in the concession org`);
     }
     if (!user) {
       user = await api(token, 'POST', '/management/v1/users/human', {
@@ -351,24 +372,34 @@ async function main() {
         profile: { firstName: spec.givenName, lastName: spec.familyName },
         email: { email: spec.email, isEmailVerified: true },
         initialPassword: 'Password1!',
-      });
-      console.log(`  created user ${spec.userName} (${user.userId})`);
+      }, concessionOrgId);
+      console.log(`  created user ${spec.userName} (${user.userId}) in the concession org`);
     } else {
-      console.log(`  existing user ${spec.userName} (${user.id})`);
+      console.log(`  existing user ${spec.userName} (${user.id}) in the concession org`);
     }
     const userId = user.userId ?? user.id;
 
     for (const key of ['concessionId', 'assemblyId', 'scope_level', 'assembly_ids']) {
       try {
-        await api(token, 'DELETE', `/management/v1/users/${userId}/metadata/${key}`, undefined, orgId);
+        await api(token, 'DELETE', `/management/v1/users/${userId}/metadata/${key}`, undefined, concessionOrgId);
       } catch {
         // Metadata may not exist on a fresh user.
       }
     }
-    console.log(`  removed legacy tenancy metadata for ${spec.userName}`);
 
-    await syncUserGrant(token, userId, projectId, spec.roles, orgId);
+    await syncUserGrant(token, userId, projectId, spec.roles, concessionOrgId);
     console.log(`  synced grant for ${spec.userName}: ${spec.roles.join(', ') || '(none)'}`);
+    if (spec.roles.includes('CONCESSION_SUPER_ADMIN')) {
+      await grantSuperAdminInAssemblyOrgs(token, projectId, orgId, concessionOrgId, userId, spec.userName);
+    }
+  }
+
+  console.log('\n4.1 No iDARMS roles for people in the infrastructure org');
+  const infraHumans = new Set((await listUsers(token, null, orgId)).filter((u) => u.human).map((u) => u.id));
+  for (const grant of await listGrants(token, null, orgId)) {
+    if (grant.projectId !== projectId || !infraHumans.has(grant.userId)) continue;
+    await api(token, 'DELETE', `/management/v1/users/${grant.userId}/grants/${grant.id}`, undefined, orgId);
+    console.log(`  removed iDARMS grant from ${grant.userName ?? grant.userId} (infrastructure org)`);
   }
 
   console.log('\n5. Remove legacy idarmsContext action');
@@ -468,6 +499,9 @@ async function main() {
   console.log('\n9. Portal login client (ADR-0004)');
   await ensurePortalLogin(token);
 
+  console.log('\n10. Register the concession org in the iDARMS org registry');
+  const registered = registerConcessionOrg(concessionOrgId, orgId);
+
   console.log('\nSummary — add to apps/idarms-portal/.env.local:');
   console.log(`  ZITADEL_LOGIN_CLIENT_KEY_PATH=${LOGIN_CLIENT_KEY_PATH}`);
   console.log('  AUTH_SECRET=<openssl rand -base64 32>');
@@ -488,8 +522,109 @@ async function main() {
     console.log('  CROIP_CLIENT_ID=croip-m2m');
     console.log('  CROIP_CLIENT_SECRET=(unchanged from first run — see apps/idarms-portal/.env.local)');
   }
-  console.log('\nTest users: concession-admin (CONCESSION_SUPER_ADMIN) / field-agent (FIELD_AGENT)  (password Password1!)');
+  console.log('\nOrganisations:');
+  console.log(`  infrastructure (ZITADEL default, not a tenant): ${orgId}`);
+  console.log(`  concession "${CONCESSION_ORG_NAME}" (CONCESSION scope): ${concessionOrgId}${registered ? '' : '  <- NOT registered yet, see step 10'}`);
+  console.log('\nconcessions-management-service .env:');
+  console.log(`  ZITADEL_PROJECT_OWNER_ORG_ID=${orgId}`);
+  console.log('\nTest user: concession-admin (CONCESSION_SUPER_ADMIN, concession org)  (password Password1!)');
+  console.log('Assembly staff (field agents and others) are invited into their assembly org through the portal.');
   console.log(`Canonical roles: ${PROJECT_ROLE_KEYS.join(', ')}`);
+}
+
+/** The dedicated concession org, found by name or created once. Never the infrastructure org. */
+async function ensureConcessionOrg(token, infrastructureOrgId) {
+  const found = (await api(token, 'POST', '/admin/v1/orgs/_search', {
+    query: { limit: 10 },
+    queries: [{ nameQuery: { name: CONCESSION_ORG_NAME, method: 'TEXT_QUERY_METHOD_EQUALS' } }],
+  }))?.result ?? [];
+  if (found.length > 1) {
+    throw new Error(`More than one org is named "${CONCESSION_ORG_NAME}"; resolve this in the ZITADEL console first.`);
+  }
+  if (found[0]?.id) {
+    if (found[0].id === infrastructureOrgId) {
+      throw new Error(`"${CONCESSION_ORG_NAME}" is the infrastructure org; the concession needs its own org.`);
+    }
+    console.log(`  existing concession org "${CONCESSION_ORG_NAME}" (${found[0].id})`);
+    return found[0].id;
+  }
+  const created = await api(token, 'POST', '/v2/organizations', { name: CONCESSION_ORG_NAME });
+  const id = String(created?.organizationId ?? '');
+  if (!id) throw new Error('ZITADEL did not return the new concession org id.');
+  console.log(`  created concession org "${CONCESSION_ORG_NAME}" (${id})`);
+  return id;
+}
+
+/** Grants the iDARMS project's human roles to the concession org so its users can hold them. */
+async function ensureConcessionProjectGrant(token, projectId, infrastructureOrgId, concessionOrgId) {
+  const roleKeys = [...HUMAN_ROLE_KEYS].sort();
+  const grants = (await api(token, 'POST', `/management/v1/projects/${projectId}/grants/_search`, {}, infrastructureOrgId))?.result ?? [];
+  const existing = grants.find((grant) => grant.grantedOrgId === concessionOrgId);
+  if (!existing) {
+    await api(token, 'POST', `/management/v1/projects/${projectId}/grants`, { grantedOrgId: concessionOrgId, roleKeys }, infrastructureOrgId);
+    console.log('  granted the iDARMS project to the concession org');
+    return;
+  }
+  const current = [...(existing.grantedRoleKeys ?? [])].sort();
+  if (JSON.stringify(current) === JSON.stringify(roleKeys)) {
+    console.log('  concession org already holds the iDARMS project grant');
+    return;
+  }
+  await api(token, 'PUT', `/management/v1/projects/${projectId}/grants/${existing.grantId}`, { roleKeys }, infrastructureOrgId);
+  console.log('  updated the concession org project grant roles');
+}
+
+/**
+ * Onboarding gives every Concession Super Admin an external CONCESSION_SUPER_ADMIN
+ * grant in each assembly org; the Access Directory reads those grants. A super
+ * admin recreated here gets them again in every org that holds the iDARMS project
+ * grant (the assembly orgs). The grant only lists access; permissions still come
+ * from the home (concession) org (ADR-0003).
+ */
+async function grantSuperAdminInAssemblyOrgs(token, projectId, infrastructureOrgId, concessionOrgId, userId, userName) {
+  const projectGrants = (await api(token, 'POST', `/management/v1/projects/${projectId}/grants/_search`, {}, infrastructureOrgId))?.result ?? [];
+  for (const grant of projectGrants) {
+    const assemblyOrgId = grant.grantedOrgId;
+    if (!assemblyOrgId || assemblyOrgId === concessionOrgId) continue;
+    const existing = (await listGrants(token, null, assemblyOrgId))
+      .find((userGrant) => userGrant.userId === userId && userGrant.projectId === projectId);
+    if (existing?.roleKeys?.includes('CONCESSION_SUPER_ADMIN')) continue;
+    if (existing) {
+      await api(token, 'PUT', `/management/v1/users/${userId}/grants/${existing.id}`, {
+        roleKeys: [...new Set([...(existing.roleKeys ?? []), 'CONCESSION_SUPER_ADMIN'])],
+      }, assemblyOrgId);
+    } else {
+      await api(token, 'POST', `/management/v1/users/${userId}/grants`, {
+        userId, projectId, roleKeys: ['CONCESSION_SUPER_ADMIN'],
+      }, assemblyOrgId);
+    }
+    console.log(`  granted ${userName} CONCESSION_SUPER_ADMIN in assembly org ${grant.grantedOrgName ?? assemblyOrgId}`);
+  }
+}
+
+/**
+ * Registers the concession org (CONCESSION scope, no assembly) through the same
+ * operator command used in staging and production. Needs the concessions
+ * database; when it is not reachable the command to run later is printed.
+ */
+function registerConcessionOrg(concessionOrgId, infrastructureOrgId) {
+  const args = [
+    '--filter', '@idarms/concessions-management-service', 'org:register-concession',
+    '--org-id', concessionOrgId,
+    '--sole-concession',
+    '--infrastructure-org-id', infrastructureOrgId,
+    '--actor', 'zitadel-bootstrap',
+    '--apply',
+  ];
+  try {
+    // One command string: every argument is an id or flag this script controls (no quoting needed).
+    execSync(`pnpm ${args.join(' ')}`, { cwd: REPO_ROOT, stdio: 'inherit' });
+    return true;
+  } catch {
+    console.log('  could not register it now (is the concessions database up?). Run later:');
+    console.log(`  pnpm ${args.join(' ')}`);
+    return false;
+  }
 }
 
 main().catch((err) => {

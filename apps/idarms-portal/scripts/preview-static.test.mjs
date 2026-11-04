@@ -9,7 +9,7 @@ function read(path) {
 }
 
 const PREVIEW_READ_ONLY_FILES = [
-  'src/app/preview/[persona]/page.tsx',
+  'src/app/(portal)/preview/[persona]/page.tsx',
   'src/components/preview/preview-workspace.tsx',
   'src/lib/preview-fixtures.ts',
 ];
@@ -26,9 +26,9 @@ test('preview route, workspace and fixtures never import auth or backend API hel
 });
 
 test('the only entry call is the dedicated preview audit write', async () => {
-  const source = await read('src/app/preview/start-actions.ts');
+  const source = await read('src/app/(portal)/preview/start-actions.ts');
   assert.match(source, /\/preview\/audit/);
-  assert.doesNotMatch(source, /\/v1\/(assemblies|staff|portfolio|access-directory|audit\?)/);
+  assert.doesNotMatch(source, /\/v1\/(assemblies|staff|concession|access-directory|audit\?)/);
   assert.doesNotMatch(source, /@\/auth|next-auth|ZITADEL|zitadel/);
 });
 

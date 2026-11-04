@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save } from 'lucide-react';
-import { createContractAction, updateContractAction } from '@/app/concessions/actions';
+import { createContractAction, updateContractAction } from '@/app/(portal)/concessions/actions';
 import type { Contract } from '@/lib/concessions';
 
 function dateInput(value?: string) {

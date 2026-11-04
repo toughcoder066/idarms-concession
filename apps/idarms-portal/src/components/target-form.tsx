@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, Target } from 'lucide-react';
-import { saveTargetAction } from '@/app/concessions/actions';
+import { saveTargetAction } from '@/app/(portal)/concessions/actions';
 
 export function TargetForm({
   assemblyId,

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../../../generated/prisma';
 import { canManageRole, canManageUserWithRoles, PLATFORM_ADMIN } from '../../lib/roles';
 import type { AuditInput } from '../concessions/audit';
+import { concessionOrgId } from '../orgs/context';
 import {
   isZitadelNotFound,
   type ZitadelProvisioningClient,
@@ -39,12 +40,14 @@ export interface OnboardingActor {
   actorEmail?: string;
   requestId: string;
   expectedConcessionId?: string;
-  portfolioAuthorized?: boolean;
+  /** A Platform Admin, or a Concession Super Admin whose home org is the CONCESSION-scoped org. */
+  concessionAuthorized?: boolean;
 }
 
 export interface OnboardingConfig {
   projectId: string;
-  portfolioOrgId: string;
+  /** The ZITADEL org that owns the iDARMS project (infrastructure, not a tenant). */
+  projectOwnerOrgId: string;
 }
 
 export interface OnboardAssemblyDeps {
@@ -161,11 +164,23 @@ async function runOnboardAssembly(
       { assemblyId, concessionId, assemblyName: assembly.assemblyName },
     );
   }
-  if (!actor.portfolioAuthorized) {
+  if (!actor.concessionAuthorized) {
     throw new OnboardingError(
-      'Only a portfolio-scoped Concession Super Admin can onboard assemblies.',
+      'Only a Concession Super Admin signed in at concession level can onboard assemblies.',
       'forbidden',
       403,
+      false,
+      { assemblyId, concessionId, assemblyName: assembly.assemblyName },
+    );
+  }
+
+  // Concession Super Admins live in the CONCESSION-scoped org; it must be registered first.
+  const concessionOrg = await concessionOrgId(prisma, concessionId);
+  if (!concessionOrg) {
+    throw new OnboardingError(
+      'No CONCESSION organisation is registered for this concession. Register it with org:register-concession first.',
+      'concession_org_unregistered',
+      409,
       false,
       { assemblyId, concessionId, assemblyName: assembly.assemblyName },
     );
@@ -174,7 +189,7 @@ async function runOnboardAssembly(
   const existingRegistry = await prisma.zitadelOrgContext.findUnique({ where: { assemblyId } });
   if (existingRegistry?.status === 'ACTIVE') {
     const holders = await zitadel.listProjectRoleHolders({
-      portfolioOrgId: config.portfolioOrgId,
+      orgId: concessionOrg,
       projectId: config.projectId,
       role: 'CONCESSION_SUPER_ADMIN',
     });
@@ -267,7 +282,7 @@ async function runOnboardAssembly(
     });
 
     await zitadel.ensureProjectGrant({
-      portfolioOrgId: config.portfolioOrgId,
+      projectOwnerOrgId: config.projectOwnerOrgId,
       projectId: config.projectId,
       grantedOrgId: orgId,
       roleKeys: ASSEMBLY_PROJECT_GRANT_ROLE_KEYS,
@@ -282,7 +297,7 @@ async function runOnboardAssembly(
     });
 
     const holders = await zitadel.listProjectRoleHolders({
-      portfolioOrgId: config.portfolioOrgId,
+      orgId: concessionOrg,
       projectId: config.projectId,
       role: 'CONCESSION_SUPER_ADMIN',
     });

@@ -465,7 +465,7 @@ export function superAdminAuth(
     permissions: [],
     roleGrants: orgIds.map((orgId) => ({ role: 'CONCESSION_SUPER_ADMIN', orgId })),
     authorizedOrgIds: orgIds,
-    homeOrgId: 'org-portfolio',
+    homeOrgId: 'org-concession',
     concessionId: CONCESSION_ID,
   };
 }

@@ -1,12 +1,23 @@
-import { capabilitiesForRoles, parseRoleGrants, rolesInOrg } from '@idarms/contracts';
 import NextAuth from 'next-auth';
 import Zitadel from 'next-auth/providers/zitadel';
-import { resolveOrgContext } from './lib/org-context';
+import { NextResponse } from 'next/server';
+import {
+  claimsFromAccessToken,
+  decodeJwt,
+  endedToken,
+  refreshAccessToken,
+  rolesFromAccessToken,
+  sessionEndPath,
+  type AppToken,
+  type SessionError,
+} from './lib/session-token';
+import { revokeRefreshToken } from './lib/zitadel-login/revoke';
 
+// The session carries no tokens: access, ID and refresh tokens stay in the
+// encrypted session cookie and are read only on the server (lib/server-token.ts).
 declare module 'next-auth' {
   interface Session {
-    accessToken?: string;
-    idToken?: string;
+    error?: SessionError;
     userId?: string;
     roles: string[];
     permissions: string[];
@@ -17,117 +28,8 @@ declare module 'next-auth' {
   }
 }
 
-interface AppToken {
-  accessToken?: string;
-  idToken?: string;
-  refreshToken?: string;
-  expiresAt?: number;
-  userId?: string;
-  roles?: string[];
-  permissions?: string[];
-  scopeLevel?: string;
-  assemblyIds?: string[];
-  concessionId?: string;
-  assemblyId?: string;
-}
-
-interface JwtPayload {
-  [key: string]: unknown;
-}
-
-function decodeJwt(token?: string): JwtPayload | null {
-  if (!token) return null;
-  const part = token.split('.')[1];
-  if (!part) return null;
-  try {
-    const normalized = part.replaceAll('-', '+').replaceAll('_', '/');
-    return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8')) as JwtPayload;
-  } catch {
-    return null;
-  }
-}
-
-const RESOURCE_OWNER_CLAIM = 'urn:zitadel:iam:user:resourceowner:id';
-
 if (!process.env.ZITADEL_PROJECT_ID) {
   console.warn('[auth] ZITADEL_PROJECT_ID is not set; only the generic project role claim is read.');
-}
-
-async function claimsFromAccessToken(accessToken?: string) {
-  const payload = decodeJwt(accessToken);
-  if (!payload) return null;
-
-  const roleGrants = parseRoleGrants(payload, process.env.ZITADEL_PROJECT_ID);
-  const resourceOwner = payload[RESOURCE_OWNER_CLAIM];
-  // The home organisation comes from ZITADEL only, never from role grants.
-  // Without it the session carries no roles; the services refuse it too.
-  const homeOrgId = typeof resourceOwner === 'string' && resourceOwner ? resourceOwner : undefined;
-  if (!homeOrgId) {
-    console.warn('[auth] Access token has no home organisation claim; session gets no roles.', {
-      subject: typeof payload.sub === 'string' ? payload.sub : undefined,
-      missingClaim: RESOURCE_OWNER_CLAIM,
-      claimsPresent: Object.keys(payload),
-    });
-  }
-  // Roles count only in the organisation the tenant comes from.
-  const roles = rolesInOrg(roleGrants, homeOrgId);
-  const permissions = capabilitiesForRoles(roles);
-  const orgContext = homeOrgId ? await resolveOrgContext(homeOrgId) : null;
-  const isSuperAdmin = roles.includes('CONCESSION_SUPER_ADMIN');
-  const hasAssemblyRole = roles.includes('ASSEMBLY_ADMIN');
-
-  return {
-    userId: typeof payload.sub === 'string' ? payload.sub : undefined,
-    roles,
-    permissions,
-    concessionId: orgContext?.concessionId,
-    assemblyId: orgContext?.assemblyId ?? undefined,
-    assemblyIds: orgContext?.assemblyId ? [orgContext.assemblyId] : [],
-    scopeLevel: isSuperAdmin && !hasAssemblyRole
-      ? 'PORTFOLIO'
-      : orgContext?.scope ?? (isSuperAdmin ? 'PORTFOLIO' : 'ASSEMBLY'),
-  };
-}
-
-async function refreshAccessToken(token: AppToken): Promise<AppToken> {
-  if (!token.refreshToken || !process.env.ZITADEL_ISSUER || !process.env.ZITADEL_CLIENT_ID || !process.env.ZITADEL_CLIENT_SECRET) {
-    return token;
-  }
-  if (token.expiresAt && token.expiresAt > Date.now() / 1000 + 30) return token;
-
-  try {
-    const response = await fetch(`${process.env.ZITADEL_ISSUER.replace(/\/+$/, '')}/oauth/v2/token`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        accept: 'application/json',
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: token.refreshToken,
-        client_id: process.env.ZITADEL_CLIENT_ID,
-        client_secret: process.env.ZITADEL_CLIENT_SECRET,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const refreshed = await response.json() as {
-      access_token?: string;
-      id_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-      error?: string;
-    };
-    if (!response.ok || !refreshed.access_token) return token;
-    return {
-      ...token,
-      accessToken: refreshed.access_token,
-      idToken: refreshed.id_token ?? token.idToken,
-      refreshToken: refreshed.refresh_token ?? token.refreshToken,
-      expiresAt: refreshed.expires_in ? Math.floor(Date.now() / 1000) + refreshed.expires_in : token.expiresAt,
-    };
-  } catch {
-    return token;
-  }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -146,7 +48,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/login',
   },
   callbacks: {
-    authorized({ auth }) {
+    /** A user with no iDARMS role in their home organisation never gets a session. */
+    async signIn({ account }) {
+      const { userId, roles } = rolesFromAccessToken(account?.access_token);
+      if (roles.length > 0) return true;
+      console.warn('[auth] Sign-in refused: the user holds no iDARMS role in their home organisation.', { subject: userId });
+      if (account?.refresh_token) await revokeRefreshToken(account.refresh_token);
+      return sessionEndPath('NoRoles');
+    },
+    /** An ended session goes to the sign-out route, which clears it; no session goes to /login. */
+    authorized({ auth, request }) {
+      if (auth?.error) return NextResponse.redirect(new URL(sessionEndPath(auth.error), request.nextUrl));
       return Boolean(auth?.user);
     },
     async jwt({ token, account }) {
@@ -156,21 +68,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         app.idToken = account.id_token;
         app.refreshToken = account.refresh_token;
         app.expiresAt = account.expires_at;
+        delete app.error;
       }
+      if (app.error) return { sub: token.sub, ...endedToken(app, app.error) };
 
-      const refreshed = await refreshAccessToken(app);
-      Object.assign(app, refreshed);
+      Object.assign(app, await refreshAccessToken(app));
+      if (app.error) return { sub: token.sub, ...endedToken(app, app.error) };
 
+      // Roles are re-read from every new access token, so a revoked role ends
+      // the session at the next refresh at the latest.
       const claims = await claimsFromAccessToken(app.accessToken);
-      if (claims) {
-        app.userId = claims.userId;
-        app.roles = claims.roles;
-        app.permissions = claims.permissions;
-        app.concessionId = claims.concessionId;
-        app.assemblyId = claims.assemblyId;
-        app.assemblyIds = claims.assemblyIds;
-        app.scopeLevel = claims.scopeLevel;
+      if (claims.roles.length === 0) {
+        console.warn('[auth] Session ended: the user no longer holds an iDARMS role.', { subject: claims.userId });
+        return { sub: token.sub, ...endedToken(app, 'NoRoles') };
       }
+      app.userId = claims.userId;
+      app.roles = claims.roles;
+      app.permissions = claims.permissions;
+      app.concessionId = claims.concessionId;
+      app.assemblyId = claims.assemblyId;
+      app.assemblyIds = claims.assemblyIds;
+      app.scopeLevel = claims.scopeLevel;
 
       // Keep the identity fields fresh on the session token so the portal can
       // always show the user's real name/email, even when the provider profile
@@ -196,8 +114,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       const app = token as typeof token & AppToken;
-      session.accessToken = app.accessToken;
-      session.idToken = app.idToken;
+      session.error = app.error;
       session.userId = app.userId ?? '';
       session.roles = app.roles ?? [];
       session.permissions = app.permissions ?? [];

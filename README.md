@@ -129,7 +129,7 @@ The operational schema follows [docs/update.md](docs/update.md):
 The portal now includes a dedicated Concession Management workspace backed by
 `concessions-management-service` and `gis-service`:
 
-- **Portfolio overview** — onboarding readiness, rate configuration, pending approvals and
+- **Concession overview** — onboarding readiness, rate configuration, pending approvals and
   recent immutable audit activity.
 - **Assembly onboarding** — contract link, CROIP identifier, branding, GIS coverage,
   administrator, fee-fixing completion, revenue target and agent coverage (8 readiness checks).
@@ -222,16 +222,33 @@ The bootstrap creates:
 - **8 human project roles** — `CONCESSION_SUPER_ADMIN`, `ASSEMBLY_ADMIN`,
   `FIELD_OPS_MANAGER`, `FINANCE_OFFICER`, `SECRETARY`, `CASHIER`, `FIELD_AGENT`,
   `ASSEMBLY_VIEWER` — plus the machine role `CROIP_M2M`. Capabilities such as
-  `property:verify`, `fee_fixing:manage` and `portfolio:reporting:read` are bundled
+  `property:verify`, `fee_fixing:manage` and `concession:reporting:read` are bundled
   into these roles by the shared model in `packages/contracts/src/roles.ts`; they are
   not separate ZITADEL roles. The bootstrap retires the old flat permission roles.
-- Human users `concession-admin` (`CONCESSION_SUPER_ADMIN`) and `field-agent`
-  (`FIELD_AGENT`), password `Password1!`.
+- The dedicated concession organisation **iDARMS Concession** (name: `IDARMS_CONCESSION_ORG_NAME`),
+  granted the iDARMS project's human roles, and registered in the org registry as
+  `CONCESSION` (our concession id, no assembly) with `org:register-concession`.
+- Human user `concession-admin` (`CONCESSION_SUPER_ADMIN`) in the concession org, password
+  `Password1!`. Older bootstraps created it, and `field-agent`, in ZITADEL's default org;
+  the bootstrap recreates `concession-admin` in the concession org and removes iDARMS roles
+  from people left in the default org. Field agents and other assembly staff are invited
+  into their assembly org through the portal.
 - Machine user `croip-m2m` (JWT client-credentials) as the stand-in for the CROIP-issued
   M2M client.
 - No `idarmsContext` token action and no `concessionId`/`assemblyId` user metadata:
   tenant context is resolved from ZITADEL organization claims through the
-  `orgId → concessionId/assemblyId` registry exposed by the concessions service.
+  `orgId → {concessionId, assemblyId, scope}` registry exposed by the concessions service.
+
+Organisations (ADR-0003 decision 7):
+
+| ZITADEL organisation | Registry | Holds |
+|---|---|---|
+| ZITADEL default org | not a tenant, never registered | Project, apps, machine users |
+| iDARMS Concession | `CONCESSION`, concession id, no assembly | Concession-wide users |
+| One org per assembly | `ASSEMBLY`, same concession id, its assembly id | That assembly's staff |
+
+There is no `PORTFOLIO` scope. Staging and production register the concession org with the
+operator command in `services/concessions-management-service/README.md`.
 
 Admin console: <http://localhost:8080> (`zitadel-admin@zitadel.localhost` / `Password1!`).
 The bootstrap is idempotent and safe to re-run; secrets are printed on first creation only
@@ -294,7 +311,8 @@ The access token carries:
   external assembly-org grants for the Concession Super Admin.
 - `urn:zitadel:iam:user:resourceowner:id` — the user's home organisation. The portal
   requests it with the `urn:zitadel:iam:user:resourceowner` scope. It is resolved through
-  `zitadel_org_contexts` to the concession and assembly. A token without it is refused
+  `zitadel_org_contexts` to the concession, the assembly and the scope (`CONCESSION` or
+  `ASSEMBLY`); an unregistered org has no tenant. A token without it is refused
   (401 `home_org_missing`, logged); the home org is never inferred from role grants.
 - Permissions come only from roles granted in the home organisation, and only the
   iDARMS project's role claims count (`ZITADEL_PROJECT_ID`).
@@ -306,7 +324,7 @@ The two staff screens are live at:
 
 - **Staff & Access** — `/assembly/:assemblyId/staff-access` for an Assembly Admin's own
   assembly (no assembly selector).
-- **Access Directory** — `/portfolio/access-directory` for a Concession Super Admin,
+- **Access Directory** — `/concession/access-directory` for a Concession Super Admin,
   listing only assemblies returned by the live per-org grant query. Drilling into an
   assembly opens the same Staff & Access workspace with an assembly switcher.
 
@@ -316,7 +334,7 @@ The two staff screens are live at:
   (and for a Super Admin opening an assembly directly). It is scoped by the same
   `resolveStaffAccess()` check as Staff & Access and lists only that assembly's audit
   rows, including Super Admin actions with a distinct badge.
-- **Audit Ledger** — `/portfolio/audit-ledger` for a Concession Super Admin. **My
+- **Audit Ledger** — `/concession/audit-ledger` for a Concession Super Admin. **My
   actions** shows only the caller's own actions across assemblies returned by the live
   per-org grant query. **Per-assembly activity** reuses the same audit history view as
   Activity & Audit for one explicitly selected assembly; there is no merged cross-assembly
@@ -358,14 +376,14 @@ a generic persona's assembly workspace without impersonating a real user:
   `@example.test` identities, and always render the banner/exit/disabled controls.
 
 Navigation is persona-aware: an `ASSEMBLY_ADMIN` sees **Assembly Administration → Staff &
-access** and **Activity & audit**, a `CONCESSION_SUPER_ADMIN` sees **Concession Portfolio →
+access** and **Activity & audit**, a `CONCESSION_SUPER_ADMIN` sees **Concession →
 Access directory** and **Audit ledger**, and a user with neither role sees neither item.
 
 Local login fixtures:
 
 | Persona | Login | Password |
 |---|---|---|
-| Concession Super Admin | `concession-admin` | `Password1!` |
+| Concession Super Admin (concession org) | `concession-admin` | `Password1!` |
 | AMA Assembly Admin | `ama-active-admin@idarms.local` | `Password1!` |
 
 The AMA fixture is an active `ASSEMBLY_ADMIN` in the AMA org created for local UI testing;

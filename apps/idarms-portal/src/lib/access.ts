@@ -1,14 +1,11 @@
 import {
-  CAPABILITIES,
   capabilitiesForRoles,
   getRoleDefinition,
   isHumanRole,
   type HumanRole,
 } from '@idarms/contracts';
+import type { Session } from 'next-auth';
 import { auth } from '@/auth';
-import { appConfig } from './config';
-
-const DEV_PERMISSIONS = [...CAPABILITIES];
 
 export interface ConcessionAccess {
   userId?: string;
@@ -17,7 +14,9 @@ export interface ConcessionAccess {
   role: HumanRole | null;
   roleLabel: string;
   scopeLevel: string;
-  portfolio: boolean;
+  /** Concession-wide: the super admin signed in from the CONCESSION-scoped org. */
+
+  concessionWide: boolean;
   assemblyId?: string;
   concessionId?: string;
   canAccessStaff: boolean;
@@ -31,27 +30,25 @@ export interface ConcessionAccess {
   readOnly: boolean;
 }
 
-export async function getConcessionAccess(): Promise<ConcessionAccess> {
-  const session = await auth();
-  const allowDevContext = process.env.NODE_ENV !== 'production';
-  const envRoles = allowDevContext ? appConfig.devRoles.split(',').map((role) => role.trim()).filter(Boolean) : [];
-  const roles = session?.roles?.length ? session.roles : envRoles;
+/**
+ * What the signed-in user may see and do in the portal, from the verified
+ * session only, with the same rules as the services: permissions come from the
+ * user's roles in their home organisation, and the tenant and scope level come
+ * from the org registry. Nothing is filled in from configuration, so a missing
+ * tenant shows as no access rather than a guessed one.
+ */
+export function accessFromSession(session: Session | null): ConcessionAccess {
+  const roles = session && !session.error ? session.roles ?? [] : [];
   const role = roles.find(isHumanRole) ?? null;
-
-  const permissionSet = new Set<string>(capabilitiesForRoles(roles));
-  for (const permission of session?.permissions ?? []) permissionSet.add(permission);
-  if (permissionSet.size === 0 && allowDevContext) {
-    for (const permission of DEV_PERMISSIONS) permissionSet.add(permission);
-  }
-  const permissions = [...permissionSet];
-
-  const assemblyId = session?.assemblyId ?? (allowDevContext ? (appConfig.devAssemblyId || undefined) : undefined);
-  const scopeLevel = session?.scopeLevel
-    ?? (allowDevContext ? process.env.IDARMS_SCOPE_LEVEL ?? (assemblyId ? 'ASSEMBLY' : 'PORTFOLIO') : 'ASSEMBLY');
-  const portfolio = scopeLevel === 'PORTFOLIO';
-  const canManage = permissions.includes('portfolio:manage') || permissions.includes('assembly:manage');
+  const permissions = [...capabilitiesForRoles(roles)];
+  const assemblyId = roles.length > 0 ? session?.assemblyId : undefined;
+  const concessionId = roles.length > 0 ? session?.concessionId : undefined;
+  const scopeLevel = (roles.length > 0 ? session?.scopeLevel : undefined) ?? 'ASSEMBLY';
+  // Concession-wide only for the super admin signed in at concession level (ADR-0002).
+  const concessionWide = scopeLevel === 'CONCESSION' && roles.includes('CONCESSION_SUPER_ADMIN');
+  const canManage = permissions.includes('concession:manage') || permissions.includes('assembly:manage');
   const canViewConcessions = permissions.some((permission) => (
-    permission === 'portfolio:read'
+    permission === 'concession:read'
     || permission.startsWith('fee_fixing:')
     || permission.startsWith('approval:')
     || permission === 'audit:read'
@@ -60,7 +57,7 @@ export async function getConcessionAccess(): Promise<ConcessionAccess> {
   const canPublishRates = permissions.includes('fee_fixing:publish');
 
   return {
-    userId: session?.userId,
+    userId: session?.userId || undefined,
     roles,
     permissions,
     role,
@@ -68,9 +65,9 @@ export async function getConcessionAccess(): Promise<ConcessionAccess> {
       ? (getRoleDefinition(role)?.displayName ?? role)
       : canManage ? 'Concession Administrator' : 'Read-only access',
     scopeLevel,
-    portfolio,
+    concessionWide,
     assemblyId,
-    concessionId: session?.concessionId ?? (allowDevContext ? appConfig.devConcessionId : undefined),
+    concessionId,
     canAccessStaff: roles.includes('ASSEMBLY_ADMIN'),
     canAccessDirectory: roles.includes('CONCESSION_SUPER_ADMIN'),
     canManage,
@@ -81,4 +78,8 @@ export async function getConcessionAccess(): Promise<ConcessionAccess> {
     canPublishRates,
     readOnly: role === 'ASSEMBLY_VIEWER' || (!canManage && !canPublishRates),
   };
+}
+
+export async function getConcessionAccess(): Promise<ConcessionAccess> {
+  return accessFromSession(await auth());
 }

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Save } from 'lucide-react';
-import { updateAssemblyAction } from '@/app/concessions/actions';
+import { updateAssemblyAction } from '@/app/(portal)/concessions/actions';
 import type { AssemblyDetail } from '@/lib/concessions';
 
 export function AssemblyProfileForm({ assembly }: { assembly: AssemblyDetail }) {

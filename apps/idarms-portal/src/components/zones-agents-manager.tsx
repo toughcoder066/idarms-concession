@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MapPin, Plus, Trash2, UserPlus, UsersRound } from 'lucide-react';
-import { assignAgentAction, createZoneAction, removeAgentAction } from '@/app/concessions/actions';
+import { assignAgentAction, createZoneAction, removeAgentAction } from '@/app/(portal)/concessions/actions';
 import type { AgentAssignment, GisZone } from '@/lib/concessions';
 
 export function ZonesAgentsManager({

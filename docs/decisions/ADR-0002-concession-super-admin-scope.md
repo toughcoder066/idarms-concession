@@ -26,7 +26,7 @@ Slice 1a made every service refuse a request unless both a concession and an ass
 
 ## Consequences for iDARMS
 
-- Read routes accept a concession-only context **only** for the `CONCESSION_SUPER_ADMIN` role at portfolio scope, and then filter by concession. All other callers still need both concession and assembly.
+- Read routes accept a concession-only context **only** for the `CONCESSION_SUPER_ADMIN` role at `CONCESSION` scope (home org = the concession org, ADR-0003), and then filter by concession. All other callers still need both concession and assembly.
 - Write routes always need a specific assembly. The super admin holds no operational write capability.
 - Once the assigned-assembly cache exists (`BoundaryProvider`, STATUS slice 4), the super admin view narrows to the concession's **currently assigned** assemblies, so an assembly whose contract has ended drops out.
 - `concessions-management-service` removes `fee_fixing:manage` and `agent:manage` from the super admin, and stops treating the scope level alone as permission to see all assemblies.

@@ -24,7 +24,7 @@ export function ConcessionScopeBar({
   const assemblyScopedPath = pathname === '/concessions/rates'
     || pathname === '/concessions/targets'
     || pathname === '/concessions/zones';
-  const selectedAssemblyId = access.portfolio
+  const selectedAssemblyId = access.concessionWide
     ? (searchParams.get('assembly') ?? (assemblyScopedPath ? (assemblies[0]?.id ?? 'all') : 'all'))
     : (access.assemblyId ?? assemblies[0]?.id ?? '');
   const selectedAssembly = assemblies.find((assembly) => assembly.id === selectedAssemblyId)
@@ -43,9 +43,9 @@ export function ConcessionScopeBar({
   return (
     <div className="concession-scope-bar">
       <div className="scope-bar-main">
-        <span className="scope-bar-item scope-bar-portfolio">
+        <span className="scope-bar-item scope-bar-concession">
           <Building2 size={15} aria-hidden="true" />
-          <span><small>Portfolio</small><strong>{selectedAssembly?.contract?.concessionName ?? 'Concession portfolio'}</strong></span>
+          <span><small>Concession</small><strong>{selectedAssembly?.contract?.concessionName ?? 'Concession'}</strong></span>
         </span>
         <span className="scope-divider" aria-hidden="true" />
         <span className="scope-bar-item">
@@ -53,7 +53,7 @@ export function ConcessionScopeBar({
           <strong>{selectedAssembly?.region ?? 'All regions'}</strong>
         </span>
         <span className="scope-divider" aria-hidden="true" />
-        {access.portfolio ? (
+        {access.concessionWide ? (
           <label className="scope-select-item">
             <small>Assembly</small>
             <select value={selectedAssemblyId} onChange={(event) => updateParam('assembly', event.target.value)} aria-label="Select assembly">

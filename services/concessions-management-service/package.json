@@ -15,6 +15,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
+    "org:register-concession": "tsx src/scripts/register-concession-org.ts",
     "worker:outbox": "tsx src/workers/outbox-worker.ts",
     "worker:inbox": "tsx src/workers/inbox-worker.ts"
   },

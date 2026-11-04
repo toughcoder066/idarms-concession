@@ -93,7 +93,7 @@ describe('ratepayer replica tenant isolation', () => {
       headers: {
         ...tenantHeaders(CONCESSION_A),
         'x-idarms-roles': 'CONCESSION_SUPER_ADMIN',
-        'x-idarms-scope-level': 'PORTFOLIO',
+        'x-idarms-scope-level': 'CONCESSION',
       },
     });
 
@@ -108,7 +108,7 @@ describe('ratepayer replica tenant isolation', () => {
       headers: {
         ...tenantHeaders(CONCESSION_A),
         'x-idarms-roles': 'ASSEMBLY_ADMIN,FINANCE_OFFICER',
-        'x-idarms-scope-level': 'PORTFOLIO',
+        'x-idarms-scope-level': 'CONCESSION',
       },
     });
 

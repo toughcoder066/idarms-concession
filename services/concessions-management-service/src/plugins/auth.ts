@@ -144,7 +144,7 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
         permissions: headerPermissions.length > 0 ? headerPermissions : config.permissions,
         concessionId: request.headers['x-idarms-concession-id'] as string | undefined,
         assemblyId: request.headers['x-idarms-assembly-id'] as string | undefined,
-        scopeLevel: (request.headers['x-idarms-scope-level'] as string | undefined) ?? 'PORTFOLIO',
+        scopeLevel: request.headers['x-idarms-scope-level'] as string | undefined,
         homeOrgId: headerOrgId,
         authorizedOrgIds: headerAuthorizedOrgIds.length > 0
           ? headerAuthorizedOrgIds

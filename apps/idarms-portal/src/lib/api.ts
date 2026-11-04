@@ -1,6 +1,6 @@
-﻿import { auth } from '@/auth';
-import { appConfig } from './config';
+﻿import { appConfig } from './config';
 import type { IdarmsResource } from './config';
+import { serverAccessToken } from './server-token';
 
 export interface IdarmsResponse<T> {
   ok: boolean;
@@ -11,12 +11,12 @@ export interface IdarmsResponse<T> {
 }
 
 async function requestHeaders(json = false): Promise<Record<string, string>> {
-  const session = await auth();
+  const accessToken = await serverAccessToken();
   const headers: Record<string, string> = { accept: 'application/json' };
   if (json) headers['content-type'] = 'application/json';
 
-  if (session?.accessToken) {
-    headers.authorization = `Bearer ${session.accessToken}`;
+  if (accessToken) {
+    headers.authorization = `Bearer ${accessToken}`;
   } else if (appConfig.devHeaderAuth && process.env.NODE_ENV !== 'production') {
     headers['x-idarms-concession-id'] = appConfig.devConcessionId;
     headers['x-idarms-roles'] = appConfig.devRoles;

@@ -5,7 +5,7 @@ import {
   clearAuditActorCache,
   listAssemblyAudit,
   listAssemblyAuditActors,
-  listPortfolioAudit,
+  listConcessionAudit,
   type AuditDeps,
 } from './service';
 
@@ -103,7 +103,7 @@ function createDeps(
 ): AuditDeps {
   return {
     prisma,
-    portfolioOrgId: 'portfolio-org',
+    concessionOrgId: 'concession-org',
     assemblyOrgId: 'ama-org',
     assemblyId: AMA,
     assemblyName: 'Accra Metropolitan Assembly',
@@ -292,7 +292,7 @@ describe('assembly audit queries', () => {
     }];
     const prisma = createPrisma(rows, staffRows);
     const deps = createDeps(prisma, {
-      'portfolio-org:super-1': { displayName: 'Concession Admin', email: 'super@example.com' },
+      'concession-org:super-1': { displayName: 'Concession Admin', email: 'super@example.com' },
     }) as AuditDeps & { assemblyId: string; assemblyOrgId: string };
 
     const page = await listAssemblyAudit(deps, { page: 1, pageSize: 10 });
@@ -323,7 +323,7 @@ describe('assembly audit queries', () => {
   });
 });
 
-describe('portfolio audit queries', () => {
+describe('concession audit queries', () => {
   it('queries only accessible assemblies and the caller actions, with facets and summary', async () => {
     const now = Date.now();
     const rows = [
@@ -348,7 +348,7 @@ describe('portfolio audit queries', () => {
       accessibleAssemblies: accessible(),
     };
 
-    const page = await listPortfolioAudit(deps, { page: 1, pageSize: 10 });
+    const page = await listConcessionAudit(deps, { page: 1, pageSize: 10 });
 
     expect(page.items.map((item) => item.id)).toEqual(['ama-1', 'ladma-1']);
     expect(page.total).toBe(2);
@@ -366,7 +366,7 @@ describe('portfolio audit queries', () => {
       actorId: SUPER,
       accessibleAssemblies: accessible(),
     };
-    await expect(listPortfolioAudit(deps, {
+    await expect(listConcessionAudit(deps, {
       page: 1,
       pageSize: 10,
       assemblyId: OTHER,
@@ -385,7 +385,7 @@ describe('portfolio audit queries', () => {
       actorId: SUPER,
       accessibleAssemblies: accessible(),
     };
-    const page = await listPortfolioAudit(deps, {
+    const page = await listConcessionAudit(deps, {
       page: 1,
       pageSize: 10,
       assemblyId: AMA,

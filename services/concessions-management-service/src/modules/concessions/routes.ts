@@ -43,7 +43,7 @@ const READ_ROLES = [
   'SECRETARY',
 ];
 const ADMIN_ROLES = ['CONCESSION_SUPER_ADMIN', 'ASSEMBLY_ADMIN'];
-const PORTFOLIO_MANAGE_ROLES = ['CONCESSION_SUPER_ADMIN'];
+const CONCESSION_MANAGE_ROLES = ['CONCESSION_SUPER_ADMIN'];
 // Rates and agent assignment are assembly operations; the super admin only views them (ADR-0002).
 const RATE_EDIT_ROLES = ['ASSEMBLY_ADMIN', 'FINANCE_OFFICER'];
 const TARGET_ROLES = ADMIN_ROLES;
@@ -116,7 +116,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/access-directory/assemblies', {
-    preHandler: requireAny(['portfolio:read', 'directory:read'], ['CONCESSION_SUPER_ADMIN']),
+    preHandler: requireAny(['concession:read', 'directory:read'], ['CONCESSION_SUPER_ADMIN']),
   }, async (request, reply) => {
     if (!config.zitadelProjectId) {
       return reply.code(503).send({
@@ -134,7 +134,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/contracts', {
-    preHandler: requireAny(['assembly:read', 'portfolio:read'], READ_ROLES),
+    preHandler: requireAny(['assembly:read', 'concession:read'], READ_ROLES),
     schema: { querystring: listQuerySchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -143,7 +143,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/contracts/:id', {
-    preHandler: requireAny(['assembly:read', 'portfolio:read'], READ_ROLES),
+    preHandler: requireAny(['assembly:read', 'concession:read'], READ_ROLES),
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -155,7 +155,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/v1/contracts', {
-    preHandler: requireAny(['portfolio:manage'], PORTFOLIO_MANAGE_ROLES),
+    preHandler: requireAny(['concession:manage'], CONCESSION_MANAGE_ROLES),
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
     if (!scope) return;
@@ -176,7 +176,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch('/v1/contracts/:id', {
-    preHandler: requireAny(['portfolio:manage'], PORTFOLIO_MANAGE_ROLES),
+    preHandler: requireAny(['concession:manage'], CONCESSION_MANAGE_ROLES),
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -203,7 +203,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/concessions', {
-    preHandler: requireAny(['assembly:read', 'portfolio:read'], READ_ROLES),
+    preHandler: requireAny(['assembly:read', 'concession:read'], READ_ROLES),
     schema: { querystring: listQuerySchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -212,7 +212,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/concessions/:id', {
-    preHandler: requireAny(['assembly:read', 'portfolio:read'], READ_ROLES),
+    preHandler: requireAny(['assembly:read', 'concession:read'], READ_ROLES),
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -224,7 +224,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/assemblies', {
-    preHandler: requireAny(['assembly:read', 'portfolio:read'], READ_ROLES),
+    preHandler: requireAny(['assembly:read', 'concession:read'], READ_ROLES),
     schema: { querystring: listQuerySchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -233,7 +233,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/v1/assemblies', {
-    preHandler: requireAny(['portfolio:manage'], PORTFOLIO_MANAGE_ROLES),
+    preHandler: requireAny(['concession:manage'], CONCESSION_MANAGE_ROLES),
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
     if (!scope) return;
@@ -268,27 +268,29 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         message,
       });
     }
-    if (!config.zitadelProjectId || !config.zitadelPortfolioOrgId) {
+    if (!config.zitadelProjectId || !config.zitadelProjectOwnerOrgId) {
       return reply.code(503).send({
         error: 'provisioning_not_configured',
-        message: 'ZITADEL_PROJECT_ID and ZITADEL_PORTFOLIO_ORG_ID are required.',
+        message: 'ZITADEL_PROJECT_ID and ZITADEL_PROJECT_OWNER_ORG_ID are required.',
       });
     }
     const input = parseBody(assemblyOnboardingSchema, request.body ?? {}, reply);
     if (!input) return;
-    const portfolioOrgId = config.zitadelPortfolioOrgId;
-    const portfolioAuthorized = actorRole === 'PLATFORM_ADMIN'
-      || (request.auth.roleGrants ?? []).some(
-        (grant) => grant.role === 'CONCESSION_SUPER_ADMIN' && grant.orgId === portfolioOrgId,
-      )
-      || ((request.auth.roleGrants?.length ?? 0) === 0
+    // A super admin acts concession-wide only from the CONCESSION-scoped home
+    // org (the registry sets scopeLevel), with the grant held in that org.
+    const atConcessionLevel = request.auth.scopeLevel === 'CONCESSION';
+    const concessionAuthorized = actorRole === 'PLATFORM_ADMIN'
+      || (atConcessionLevel && (request.auth.roleGrants ?? []).some(
+        (grant) => grant.role === 'CONCESSION_SUPER_ADMIN' && grant.orgId === request.auth.homeOrgId,
+      ))
+      || (atConcessionLevel && (request.auth.roleGrants?.length ?? 0) === 0
         && request.auth.roles.includes('CONCESSION_SUPER_ADMIN'));
 
     try {
       const result = await onboardAssembly({
         prisma: app.prisma,
         zitadel: app.zitadelProvisioning,
-        config: { projectId: config.zitadelProjectId, portfolioOrgId },
+        config: { projectId: config.zitadelProjectId, projectOwnerOrgId: config.zitadelProjectOwnerOrgId },
         audit: (entry) => app.prisma.$transaction((tx) => writeAudit(tx, entry)),
         invalidateAccessDirectory,
       }, {
@@ -301,7 +303,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
           actorEmail: request.auth.email,
           requestId: request.id,
           expectedConcessionId: request.auth.concessionId,
-          portfolioAuthorized,
+          concessionAuthorized,
         },
       });
       return reply.code(result.alreadyProvisioned ? 200 : 201).send(result);
@@ -323,7 +325,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/assemblies/:id', {
-    preHandler: requireAny(['assembly:read', 'portfolio:read'], READ_ROLES),
+    preHandler: requireAny(['assembly:read', 'concession:read'], READ_ROLES),
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -335,7 +337,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch('/v1/assemblies/:id', {
-    preHandler: requireAny(['assembly:manage', 'portfolio:manage'], ADMIN_ROLES),
+    preHandler: requireAny(['assembly:manage', 'concession:manage'], ADMIN_ROLES),
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -399,7 +401,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/assemblies/:id/target', {
-    preHandler: requireAny(['assembly:read', 'portfolio:read'], READ_ROLES),
+    preHandler: requireAny(['assembly:read', 'concession:read'], READ_ROLES),
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -428,7 +430,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/assemblies/:id/agents', {
-    preHandler: requireAny(['assembly:read', 'portfolio:read'], READ_ROLES),
+    preHandler: requireAny(['assembly:read', 'concession:read'], READ_ROLES),
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const scope = scopeOrReply(request, reply);
@@ -533,7 +535,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/v1/lookups', {
-    preHandler: requireAny(['assembly:read', 'portfolio:read'], READ_ROLES),
+    preHandler: requireAny(['assembly:read', 'concession:read'], READ_ROLES),
   }, async (_request, reply) => {
     return { data: await listLookups(app.prisma) };
   });

@@ -102,7 +102,7 @@ describe('property replica tenant isolation', () => {
       headers: {
         ...tenantHeaders(CONCESSION_A),
         'x-idarms-roles': 'CONCESSION_SUPER_ADMIN',
-        'x-idarms-scope-level': 'PORTFOLIO',
+        'x-idarms-scope-level': 'CONCESSION',
       },
     });
 
@@ -119,7 +119,7 @@ describe('property replica tenant isolation', () => {
       headers: {
         ...tenantHeaders(CONCESSION_A),
         'x-idarms-roles': 'CONCESSION_SUPER_ADMIN',
-        'x-idarms-scope-level': 'PORTFOLIO',
+        'x-idarms-scope-level': 'CONCESSION',
       },
       payload: { status: 'APPROVED' },
     });

@@ -57,7 +57,7 @@ export interface AuditActorOption extends AuditActor {
   lastActionAt: string | null;
 }
 
-export interface PortfolioAssemblyActivity {
+export interface ConcessionAssemblyActivity {
   assemblyId: string;
   assemblyName: string | null;
   assemblyCode: string | null;
@@ -65,7 +65,7 @@ export interface PortfolioAssemblyActivity {
   lastActionAt: string | null;
 }
 
-export interface PortfolioAuditSummary {
+export interface ConcessionAuditSummary {
   actionsThisWeek: number;
   actionsThisMonth: number;
   assembliesActedOn: number;
@@ -73,15 +73,16 @@ export interface PortfolioAuditSummary {
   pendingInvitationsOlderThan7Days: number;
 }
 
-export interface PortfolioAuditPage extends AuditPage {
-  assemblies: PortfolioAssemblyActivity[];
-  summary: PortfolioAuditSummary;
+export interface ConcessionAuditPage extends AuditPage {
+  assemblies: ConcessionAssemblyActivity[];
+  summary: ConcessionAuditSummary;
 }
 
 export interface AuditDeps {
   prisma: PrismaClient;
   zitadel: ZitadelStaffClient;
-  portfolioOrgId: string;
+  /** The CONCESSION-scoped org, from the org registry; unset when none is registered. */
+  concessionOrgId?: string;
   assemblyOrgId?: string;
   assemblyId?: string;
   assemblyName?: string | null;
@@ -181,7 +182,7 @@ async function resolveActor(
   deps: AuditDeps,
   actorId: string,
 ): Promise<AuditActor> {
-  const cacheKey = `${deps.portfolioOrgId}:${deps.assemblyOrgId ?? '*'}:${deps.assemblyId ?? '*'}:${actorId}`;
+  const cacheKey = `${deps.concessionOrgId ?? '-'}:${deps.assemblyOrgId ?? '*'}:${deps.assemblyId ?? '*'}:${actorId}`;
   const cached = actorCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -193,11 +194,11 @@ async function resolveActor(
     orderBy: { updatedAt: 'desc' },
   });
 
-  const portfolioUser = staff ? null : await getUserSafely(deps.zitadel, deps.portfolioOrgId, actorId);
-  const assemblyUser = staff || portfolioUser
+  const concessionUser = staff ? null : await getUserSafely(deps.zitadel, deps.concessionOrgId, actorId);
+  const assemblyUser = staff || concessionUser
     ? null
     : await getUserSafely(deps.zitadel, deps.assemblyOrgId, actorId);
-  const user = portfolioUser ?? assemblyUser;
+  const user = concessionUser ?? assemblyUser;
   const userName = user
     ? user.displayName
       || [user.firstName, user.lastName].filter(Boolean).join(' ').trim()
@@ -240,7 +241,7 @@ async function resolveTarget(
   if (staff) return { name: staff.name, email: staff.email };
 
   const user = await getUserSafely(deps.zitadel, deps.assemblyOrgId, userId)
-    ?? await getUserSafely(deps.zitadel, deps.portfolioOrgId, userId);
+    ?? await getUserSafely(deps.zitadel, deps.concessionOrgId, userId);
   if (!user) return { name: null, email: null };
   return {
     name: user.displayName
@@ -426,13 +427,13 @@ function startOfMonth(now: Date): Date {
   return date;
 }
 
-export async function listPortfolioAudit(
+export async function listConcessionAudit(
   deps: AuditDeps & {
     actorId: string;
     accessibleAssemblies: readonly AccessDirectoryEntry[];
   },
   filters: AuditFilters,
-): Promise<PortfolioAuditPage> {
+): Promise<ConcessionAuditPage> {
   const accessible = deps.accessibleAssemblies;
   const accessibleIds = accessible.map((entry) => entry.assemblyId);
   if (filters.assemblyId && !accessibleIds.includes(filters.assemblyId)) {
@@ -508,7 +509,7 @@ export async function listPortfolioAudit(
   ]);
 
   const groupByAssembly = new Map(groups.map((group) => [group.assemblyId, group]));
-  const assemblies: PortfolioAssemblyActivity[] = accessible.map((entry) => {
+  const assemblies: ConcessionAssemblyActivity[] = accessible.map((entry) => {
     const group = groupByAssembly.get(entry.assemblyId);
     return {
       assemblyId: entry.assemblyId,

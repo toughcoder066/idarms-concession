@@ -10,8 +10,8 @@ iDARMS microservice. Owned database: `gis_spatial_db` (HTTP port `3110`).
 - `POST /v1/zones` — create a zone (`gis:manage`)
 - `POST /v1/zones/:id/blocks` — create a block under a zone (`gis:manage`)
 
-Portfolio-scoped callers (`CONCESSION_SUPER_ADMIN`) can read zones across the
-concession; assembly-scoped callers are restricted to their assembly.
+A `CONCESSION_SUPER_ADMIN` signed in from the concession org (CONCESSION scope) can read
+zones across the concession; assembly-scoped callers are restricted to their assembly.
 
 ## Consumed events
 

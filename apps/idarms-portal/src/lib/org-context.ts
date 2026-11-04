@@ -4,7 +4,7 @@ export interface OrgContext {
   orgId: string;
   concessionId: string;
   assemblyId: string | null;
-  scope: 'PORTFOLIO' | 'ASSEMBLY';
+  scope: 'CONCESSION' | 'ASSEMBLY';
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000;

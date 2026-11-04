@@ -6,13 +6,13 @@ export interface TenantScope {
 }
 
 /**
- * Only the concession super admin, signed in at concession (portfolio) level,
+ * Only the concession super admin, signed in at concession level,
  * works across every assembly of the concession (ADR-0002). Scope level alone
  * is not enough: the super admin grant must be on the caller's home org.
  * Dev-mode callers carry roles but no grants.
  */
 export function isConcessionSuperAdmin(auth: AuthContext): boolean {
-  if (auth.scopeLevel !== 'PORTFOLIO') return false;
+  if (auth.scopeLevel !== 'CONCESSION') return false;
   const grants = auth.roleGrants ?? [];
   if (grants.length > 0) {
     return grants.some((grant) => grant.role === 'CONCESSION_SUPER_ADMIN' && grant.orgId === auth.homeOrgId);

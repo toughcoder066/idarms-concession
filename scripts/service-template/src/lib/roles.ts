@@ -9,13 +9,13 @@
  */
 
 export const CAPABILITIES = [
-  // Portfolio / cross-org
-  'portfolio:read',
-  'portfolio:manage',
-  'portfolio:reporting:read',
-  'portfolio:target:read',
-  'portfolio:target:manage',
-  'portfolio:audit:read',
+  // Concession-wide
+  'concession:read',
+  'concession:manage',
+  'concession:reporting:read',
+  'concession:target:read',
+  'concession:target:manage',
+  'concession:audit:read',
   'directory:read',
   'directory:manage',
 
@@ -39,6 +39,7 @@ export const CAPABILITIES = [
 
   // Operational
   'ratepayer:read',
+  'ratepayer:create',
   'property:read',
   'property:create',
   'property:verify',
@@ -79,7 +80,7 @@ export type MachineRole = (typeof MACHINE_ROLE_KEYS)[number];
 
 export type ProjectRole = HumanRole | MachineRole;
 
-export type RoleScope = 'portfolio' | 'org' | 'machine';
+export type RoleScope = 'concession' | 'org' | 'machine';
 
 export interface RoleDefinition {
   key: ProjectRole;
@@ -95,8 +96,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
   {
     key: 'CONCESSION_SUPER_ADMIN',
     displayName: 'Concession Super Admin',
-    group: 'Portfolio',
-    scope: 'portfolio',
+    group: 'Concession',
+    scope: 'concession',
     type: 'human',
   },
   {
@@ -174,12 +175,12 @@ const ORG_READ: readonly Capability[] = [
 export const ROLE_CAPABILITIES: Record<ProjectRole, readonly Capability[]> = {
   CONCESSION_SUPER_ADMIN: [
     ...ORG_READ,
-    'portfolio:read',
-    'portfolio:manage',
-    'portfolio:reporting:read',
-    'portfolio:target:read',
-    'portfolio:target:manage',
-    'portfolio:audit:read',
+    'concession:read',
+    'concession:manage',
+    'concession:reporting:read',
+    'concession:target:read',
+    'concession:target:manage',
+    'concession:audit:read',
     'directory:read',
     'directory:manage',
     'assembly:manage',
@@ -210,6 +211,8 @@ export const ROLE_CAPABILITIES: Record<ProjectRole, readonly Capability[]> = {
     'agent:manage',
     'gis:manage',
     'document:upload',
+    'ratepayer:create',
+    'property:create',
   ],
   FIELD_OPS_MANAGER: [
     ...ORG_READ,
@@ -236,6 +239,7 @@ export const ROLE_CAPABILITIES: Record<ProjectRole, readonly Capability[]> = {
   ],
   SECRETARY: [
     ...ORG_READ,
+    'ratepayer:create',
     'property:create',
     'property:update',
     'document:upload',

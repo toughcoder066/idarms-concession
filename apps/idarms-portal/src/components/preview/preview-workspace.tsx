@@ -19,7 +19,7 @@ import {
   auditActorKind,
   getRoleDefinition,
 } from '@idarms/contracts';
-import { exitPreviewAction } from '@/app/preview/exit-actions';
+import { exitPreviewAction } from '@/app/(portal)/preview/exit-actions';
 import {
   getPreviewFixture,
   type PreviewAuditRow,

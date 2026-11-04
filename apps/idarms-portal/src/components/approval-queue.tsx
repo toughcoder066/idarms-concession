@@ -15,7 +15,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { approveAction, rejectAction } from '@/app/concessions/actions';
+import { approveAction, rejectAction } from '@/app/(portal)/concessions/actions';
 import type { ApprovalRequest } from '@/lib/concessions';
 
 interface ApprovalWithContext extends ApprovalRequest {

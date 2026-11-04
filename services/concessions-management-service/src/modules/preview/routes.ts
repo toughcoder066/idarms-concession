@@ -47,7 +47,7 @@ function sendError(
 
 export async function registerPreviewRoutes(app: FastifyInstance): Promise<void> {
   app.post('/v1/preview/audit', {
-    preHandler: requireAny(['portfolio:audit:read'], ['CONCESSION_SUPER_ADMIN', 'PLATFORM_ADMIN']),
+    preHandler: requireAny(['concession:audit:read'], ['CONCESSION_SUPER_ADMIN', 'PLATFORM_ADMIN']),
   }, async (request, reply) => {
     const body = parseOrReply(previewAuditSchema, request.body ?? {}, reply);
     if (!body) return;

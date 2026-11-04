@@ -14,7 +14,7 @@ import {
   Send,
   X,
 } from 'lucide-react';
-import { saveRatesAction, submitRatesAction } from '@/app/concessions/actions';
+import { saveRatesAction, submitRatesAction } from '@/app/(portal)/concessions/actions';
 import type { RateMatrix, RateRow } from '@/lib/concessions';
 
 type EditableRow = RateRow & {

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Mail, Phone, ShieldCheck, UserPlus, X } from 'lucide-react';
-import { inviteStaffAction } from '@/app/assembly/[assemblyId]/staff-access/actions';
+import { inviteStaffAction } from '@/app/(portal)/assembly/[assemblyId]/staff-access/actions';
 import { staffErrorMessage, type StaffRoleOption } from '@/lib/staff';
 
 export function InviteStaffModal({

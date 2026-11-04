@@ -28,7 +28,6 @@ export function ModuleWorkspace({
 }) {
   return (
     <section className="entity-page">
-      <div className="entity-breadcrumb"><Link href="/dashboard">Dashboard</Link><span>/</span><span>{title}</span></div>
       <div className="entity-hero module-hero">
         <div className="entity-hero-copy">
           <span className="entity-kicker"><span className="module-kicker-icon"><Icon size={14} aria-hidden="true" /></span>{eyebrow}</span>

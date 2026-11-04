@@ -32,30 +32,30 @@ describe('concession approval policy', () => {
 });
 
 describe('tenant scope', () => {
-  it('drops the assembly filter for the concession super admin at portfolio scope (ADR-0002)', () => {
+  it('drops the assembly filter for the concession super admin at concession scope (ADR-0002)', () => {
     expect(scopeFromAuth(auth({
       roles: ['CONCESSION_SUPER_ADMIN'],
-      roleGrants: [{ role: 'CONCESSION_SUPER_ADMIN', orgId: 'portfolio-org' }],
-      homeOrgId: 'portfolio-org',
-      scopeLevel: 'PORTFOLIO',
+      roleGrants: [{ role: 'CONCESSION_SUPER_ADMIN', orgId: 'concession-org' }],
+      homeOrgId: 'concession-org',
+      scopeLevel: 'CONCESSION',
     }))).toEqual({ concessionId: '11111111-1111-1111-1111-111111111111' });
   });
 
-  it('does not widen portfolio scope for any role other than the super admin', () => {
+  it('does not widen concession scope for any role other than the super admin', () => {
     expect(scopeFromAuth(auth({
       roles: ['ASSEMBLY_ADMIN'],
-      roleGrants: [{ role: 'ASSEMBLY_ADMIN', orgId: 'portfolio-org' }],
-      homeOrgId: 'portfolio-org',
-      scopeLevel: 'PORTFOLIO',
+      roleGrants: [{ role: 'ASSEMBLY_ADMIN', orgId: 'concession-org' }],
+      homeOrgId: 'concession-org',
+      scopeLevel: 'CONCESSION',
     }))).toBeNull();
   });
 
-  it('does not widen portfolio scope when the super admin grant is on another org', () => {
+  it('does not widen concession scope when the super admin grant is on another org', () => {
     expect(scopeFromAuth(auth({
       roles: ['CONCESSION_SUPER_ADMIN'],
       roleGrants: [{ role: 'CONCESSION_SUPER_ADMIN', orgId: 'assembly-org' }],
-      homeOrgId: 'portfolio-org',
-      scopeLevel: 'PORTFOLIO',
+      homeOrgId: 'concession-org',
+      scopeLevel: 'CONCESSION',
     }))).toBeNull();
   });
 

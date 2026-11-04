@@ -16,7 +16,7 @@ import {
 import {
   commitBulkImportAction,
   validateBulkImportAction,
-} from '@/app/assembly/[assemblyId]/staff-access/actions';
+} from '@/app/(portal)/assembly/[assemblyId]/staff-access/actions';
 import {
   staffErrorMessage,
   type BulkImportCommitResult,

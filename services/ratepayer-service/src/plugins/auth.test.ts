@@ -21,7 +21,7 @@ vi.mock('../lib/org-context', () => ({
   resolveOrgContext: vi.fn(async (orgId: string) => {
     if (orgId === ORG_A) return { orgId, concessionId: CONCESSION_A, assemblyId: ASSEMBLY_A, scope: 'ASSEMBLY' };
     if (orgId === ORG_B) return { orgId, concessionId: CONCESSION_A, assemblyId: ASSEMBLY_B, scope: 'ASSEMBLY' };
-    if (orgId === ORG_PORTFOLIO) return { orgId, concessionId: CONCESSION_A, assemblyId: null, scope: 'PORTFOLIO' };
+    if (orgId === ORG_CONCESSION) return { orgId, concessionId: CONCESSION_A, assemblyId: null, scope: 'CONCESSION' };
     return null;
   }),
 }));
@@ -35,7 +35,7 @@ const AUDIENCE = 'idarms-audience';
 const KID = 'test-key-1';
 const ORG_A = 'org-a';
 const ORG_B = 'org-b';
-const ORG_PORTFOLIO = 'org-portfolio';
+const ORG_CONCESSION = 'org-concession';
 const OUR_PROJECT = '111111111111111111';
 const ASSEMBLY_B = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const RESOURCE_OWNER = 'urn:zitadel:iam:user:resourceowner:id';
@@ -297,11 +297,11 @@ describe('permissions follow the home organisation', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  it('lets the super admin read concession-wide with the grant on the portfolio organisation', async () => {
+  it('lets the super admin read concession-wide with the grant on the concession organisation', async () => {
     const claims = {
-      [RESOURCE_OWNER]: ORG_PORTFOLIO,
+      [RESOURCE_OWNER]: ORG_CONCESSION,
       [ROLE_CLAIM]: {
-        CONCESSION_SUPER_ADMIN: { [ORG_PORTFOLIO]: 'portfolio.localhost', [ORG_A]: 'assembly-a.localhost' },
+        CONCESSION_SUPER_ADMIN: { [ORG_CONCESSION]: 'concession.localhost', [ORG_A]: 'assembly-a.localhost' },
       },
     };
     const response = await list(`Bearer ${await token({ claims })}`);
@@ -312,9 +312,9 @@ describe('permissions follow the home organisation', () => {
     expect(where).not.toHaveProperty('assemblyId');
   });
 
-  it('refuses a portfolio user whose super admin grant is only on assembly organisations', async () => {
+  it('refuses a concession-level user whose super admin grant is only on assembly organisations', async () => {
     const claims = {
-      [RESOURCE_OWNER]: ORG_PORTFOLIO,
+      [RESOURCE_OWNER]: ORG_CONCESSION,
       [ROLE_CLAIM]: { CONCESSION_SUPER_ADMIN: { [ORG_A]: 'assembly-a.localhost' } },
     };
     const response = await list(`Bearer ${await token({ claims })}`);

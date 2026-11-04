@@ -85,8 +85,9 @@ export interface ZitadelProvisioningClient {
   getOrganization(orgId: string): Promise<ZitadelOrganization | null>;
   findOrganizationByName(name: string): Promise<ZitadelOrganization | null>;
   deleteOrganization(orgId: string): Promise<void>;
+  /** Runs in the org that owns the iDARMS project: ZITADEL infrastructure, never a tenant. */
   ensureProjectGrant(input: {
-    portfolioOrgId: string;
+    projectOwnerOrgId: string;
     projectId: string;
     grantedOrgId: string;
     roleKeys: readonly string[];
@@ -102,8 +103,9 @@ export interface ZitadelProvisioningClient {
     projectId: string;
     roleKeys: readonly string[];
   }): Promise<void>;
+  /** Users holding a role through grants owned by one org (the concession org for super admins). */
   listProjectRoleHolders(input: {
-    portfolioOrgId: string;
+    orgId: string;
     projectId: string;
     role: string;
   }): Promise<ZitadelUserGrant[]>;
@@ -236,7 +238,7 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
   }
 
   async ensureProjectGrant(input: {
-    portfolioOrgId: string;
+    projectOwnerOrgId: string;
     projectId: string;
     grantedOrgId: string;
     roleKeys: readonly string[];
@@ -245,7 +247,7 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
       'POST',
       `/management/v1/projects/${encodeURIComponent(input.projectId)}/grants/_search`,
       {
-        orgId: input.portfolioOrgId,
+        orgId: input.projectOwnerOrgId,
         body: { query: { limit: 200, offset: 0 }, queries: [] },
       },
     );
@@ -258,7 +260,7 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
         'POST',
         `/management/v1/projects/${encodeURIComponent(input.projectId)}/grants`,
         {
-          orgId: input.portfolioOrgId,
+          orgId: input.projectOwnerOrgId,
           body: {
             projectId: input.projectId,
             grantedOrgId: input.grantedOrgId,
@@ -280,7 +282,7 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
         'PUT',
         `/management/v1/projects/${encodeURIComponent(input.projectId)}/grants/${encodeURIComponent(String(existing.grantId))}`,
         {
-          orgId: input.portfolioOrgId,
+          orgId: input.projectOwnerOrgId,
           body: {
             projectId: input.projectId,
             grantedOrgId: input.grantedOrgId,
@@ -350,7 +352,7 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
   }
 
   async listProjectRoleHolders(input: {
-    portfolioOrgId: string;
+    orgId: string;
     projectId: string;
     role: string;
   }): Promise<ZitadelUserGrant[]> {
@@ -361,7 +363,7 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
 
     while (all.length < total) {
       const body = await this.request('POST', '/management/v1/users/grants/_search', {
-        orgId: input.portfolioOrgId,
+        orgId: input.orgId,
         body: {
           query: { limit, offset },
           queries: [{ projectIdQuery: { projectId: input.projectId } }],

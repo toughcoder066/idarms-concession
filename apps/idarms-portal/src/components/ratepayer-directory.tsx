@@ -40,7 +40,6 @@ export function RatepayerDirectory({ ratepayers }: { ratepayers: RatepayerRecord
 
   return (
     <section className="entity-page">
-      <div className="entity-breadcrumb"><span>Operations</span><span>/</span><span>Ratepayers</span></div>
       <div className="entity-hero">
         <div className="entity-hero-copy">
           <span className="entity-kicker"><span className="module-kicker-icon"><UsersRound size={14} aria-hidden="true" /></span> PEOPLE &amp; ACCOUNTS</span>

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Plus, X } from 'lucide-react';
-import { createAssemblyAction } from '@/app/concessions/actions';
+import { createAssemblyAction } from '@/app/(portal)/concessions/actions';
 
 export function AssemblyOnboardingForm({ canManage }: { canManage: boolean }) {
   const [open, setOpen] = useState(false);

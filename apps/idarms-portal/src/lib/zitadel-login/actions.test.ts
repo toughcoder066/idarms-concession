@@ -38,9 +38,9 @@ vi.mock('./cookies', () => ({
   clearPendingLogin: vi.fn(async () => {}),
 }));
 
-const { loginAction } = await import('@/app/login/actions');
-const { acceptInviteAction } = await import('@/app/invite/accept/actions');
-const { changeRequiredPasswordAction } = await import('@/app/password/change/actions');
+const { loginAction } = await import('@/app/(auth)/login/actions');
+const { acceptInviteAction } = await import('@/app/(auth)/invite/accept/actions');
+const { changeRequiredPasswordAction } = await import('@/app/(auth)/password/change/actions');
 const { completeSignIn } = await import('./sign-in');
 const cookies = await import('./cookies');
 
@@ -90,12 +90,12 @@ describe('loginAction', () => {
     expect(result.error).toMatch(/username or password is incorrect/);
   });
 
-  it('completes the sign-in and redirects to the portal callback', async () => {
+  it('completes the sign-in and hands the portal callback to the browser for a full page load', async () => {
     state.routes = goodSession;
 
-    const url = await redirectOf(loginAction({}, form({ loginName: 'ama', password: 'Right-Pass-1!', redirectTo: '/ratepayers' })));
+    const result = await loginAction({}, form({ loginName: 'ama', password: 'Right-Pass-1!', redirectTo: '/ratepayers' }));
 
-    expect(url).toBe('http://localhost:3000/api/auth/callback/zitadel?code=c&state=s');
+    expect(result).toEqual({ redirectTo: 'http://localhost:3000/api/auth/callback/zitadel?code=c&state=s' });
     expect(completeSignIn).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 's-1', sessionToken: 'st-1' }), '/ratepayers');
   });
 

@@ -1,14 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { useFormStatus } from 'react-dom';
 import type { AuthFormState } from '@/lib/zitadel-login/form-state';
 
 type Action = (previous: AuthFormState, formData: FormData) => Promise<AuthFormState>;
 
-function SubmitButton({ label, pendingLabel }: { label: string; pendingLabel: string }) {
-  const { pending } = useFormStatus();
+/**
+ * Finishes a sign-in with a full page load. The target is the Auth.js
+ * callback (a route handler that sets the session cookie); a client-side
+ * navigation would keep the signed-out page and layout on screen.
+ */
+function useSignInRedirect(state: AuthFormState) {
+  useEffect(() => {
+    if (state.redirectTo) window.location.replace(state.redirectTo);
+  }, [state.redirectTo]);
+  return Boolean(state.redirectTo);
+}
+
+function SubmitButton({ label, pendingLabel, busy = false }: { label: string; pendingLabel: string; busy?: boolean }) {
+  const { pending: submitting } = useFormStatus();
+  const pending = submitting || busy;
   return (
     <button type="submit" className="button auth-submit" disabled={pending} aria-disabled={pending}>
       {pending ? pendingLabel : label}
@@ -22,6 +35,7 @@ function FormError({ state }: { state: AuthFormState }) {
 
 export function LoginForm({ action, redirectTo }: { action: Action; redirectTo: string }) {
   const [state, formAction] = useActionState(action, {});
+  const signingIn = useSignInRedirect(state);
   return (
     <form action={formAction} className="auth-form" noValidate>
       <FormError state={state} />
@@ -37,7 +51,7 @@ export function LoginForm({ action, redirectTo }: { action: Action; redirectTo: 
         </span>
         <input name="password" type="password" autoComplete="current-password" required />
       </label>
-      <SubmitButton label="Sign in" pendingLabel="Signing in…" />
+      <SubmitButton label="Sign in" pendingLabel="Signing in…" busy={signingIn} />
     </form>
   );
 }
@@ -75,6 +89,7 @@ export function NewPasswordForm({
   submitLabel: string;
 }) {
   const [state, formAction] = useActionState(action, {});
+  const signingIn = useSignInRedirect(state);
   return (
     <form action={formAction} className="auth-form" noValidate>
       <FormError state={state} />
@@ -88,7 +103,7 @@ export function NewPasswordForm({
         <span className="field-label">Confirm new password</span>
         <input name="confirm" type="password" autoComplete="new-password" required />
       </label>
-      <SubmitButton label={submitLabel} pendingLabel="Saving…" />
+      <SubmitButton label={submitLabel} pendingLabel={signingIn ? 'Signing in…' : 'Saving…'} busy={signingIn} />
     </form>
   );
 }

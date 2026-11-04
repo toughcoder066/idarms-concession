@@ -10,12 +10,12 @@ function auth(overrides: Partial<AuthContext>): AuthContext {
 }
 
 describe('read scope (ADR-0002)', () => {
-  it('treats a verified super admin grant on the home portfolio org as concession-wide', () => {
+  it('treats a verified super admin grant on the home concession org as concession-wide', () => {
     const superAdmin = auth({
       roles: ['CONCESSION_SUPER_ADMIN'],
-      roleGrants: [{ role: 'CONCESSION_SUPER_ADMIN', orgId: 'portfolio-org' }],
-      homeOrgId: 'portfolio-org',
-      scopeLevel: 'PORTFOLIO',
+      roleGrants: [{ role: 'CONCESSION_SUPER_ADMIN', orgId: 'concession-org' }],
+      homeOrgId: 'concession-org',
+      scopeLevel: 'CONCESSION',
     });
 
     expect(isConcessionSuperAdmin(superAdmin)).toBe(true);
@@ -26,8 +26,8 @@ describe('read scope (ADR-0002)', () => {
     expect(isConcessionSuperAdmin(auth({
       roles: ['CONCESSION_SUPER_ADMIN'],
       roleGrants: [{ role: 'CONCESSION_SUPER_ADMIN', orgId: 'assembly-org' }],
-      homeOrgId: 'portfolio-org',
-      scopeLevel: 'PORTFOLIO',
+      homeOrgId: 'concession-org',
+      scopeLevel: 'CONCESSION',
     }))).toBe(false);
   });
 
@@ -35,7 +35,7 @@ describe('read scope (ADR-0002)', () => {
     expect(readScopeFromAuth(auth({
       concessionId: undefined,
       roles: ['CONCESSION_SUPER_ADMIN'],
-      scopeLevel: 'PORTFOLIO',
+      scopeLevel: 'CONCESSION',
     }))).toBeNull();
   });
 

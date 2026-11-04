@@ -48,7 +48,6 @@ export function PropertyDirectory({ properties }: { properties: PropertyRecord[]
 
   return (
     <section className="entity-page">
-      <div className="entity-breadcrumb"><span>Operations</span><span>/</span><span>Properties</span></div>
       <div className="entity-hero">
         <div className="entity-hero-copy">
           <span className="entity-kicker"><span className="module-kicker-icon"><Building2 size={14} aria-hidden="true" /></span> PROPERTY OPERATIONS</span>

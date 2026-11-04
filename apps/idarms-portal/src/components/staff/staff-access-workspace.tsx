@@ -72,7 +72,7 @@ export function StaffAccessWorkspace({
     <section className="concession-page staff-page">
       <div className="concession-page-heading staff-page-heading">
         <div>
-          <p className="eyebrow">{isSuperAdmin ? 'Concession portfolio · assembly context' : 'Assembly administration'}</p>
+          <p className="eyebrow">{isSuperAdmin ? 'Concession · assembly context' : 'Assembly administration'}</p>
           <h1>Staff &amp; Access</h1>
           <p>{assemblyName} · {assemblyCode} · staff identities and assembly-scoped ZITADEL grants.</p>
         </div>
