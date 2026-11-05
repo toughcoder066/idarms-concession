@@ -105,7 +105,7 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
         const authorizedOrgIds = roleGrants.length > 0
           ? [...new Set(roleGrants.map((grant) => grant.orgId))]
           : [homeOrgId];
-        const context = await resolveOrgContext(homeOrgId);
+        const context = await resolveOrgContext(homeOrgId, token);
         request.auth = {
           subject: typeof payload.sub === 'string' ? payload.sub : '',
           roles,

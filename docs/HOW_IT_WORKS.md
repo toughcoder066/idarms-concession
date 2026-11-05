@@ -85,6 +85,17 @@ Why it is done this way:
 - If the lookup fails, iDARMS **refuses**. It never guesses and never shows everything.
 - ZITADEL's default org is **never registered**, so even if someone were created there by mistake, they would have no tenant and could not see anything.
 
+### How the services ask the registry (since 5 Nov 2026)
+
+The registry lives in concessions-management, so every other service has to ask it "which tenant is this person in?". Until 5 Nov anyone on the network could ask that question about any org, with no login at all (audit finding T5).
+
+Now:
+- **The service sends the person's own login token with the question**, and concessions-management checks that token again: that ZITADEL really signed it, that it was issued for iDARMS, and that it has not expired.
+- **It only ever answers about the person's own org**, the one written into their token by ZITADEL. There is no way to ask about someone else's org; the old "ask about any org by id" address no longer exists.
+- **Knowing your tenant opens nothing by itself.** Every service still checks your roles and filters every query by your assembly. The answer only tells it *which* assembly to filter by.
+- **Answers are remembered for at most a minute** (15 seconds for "this org isn't registered"), per org, never per person. So if an assembly is removed from the registry, the services stop using it within a minute. Login tokens themselves are never stored, logged or shown in error messages.
+- **In production the question must travel over HTTPS.** A service set up with a plain `http://` address for the registry refuses to start.
+
 Two settings keep this honest:
 - `ZITADEL_PROJECT_OWNER_ORG_ID` is the iDARMS Concession org. Onboarding stops (error `project_owner_mismatch`) if this doesn't match the org registered as `CONCESSION`.
 - `ZITADEL_DEFAULT_ORG_ID` is ZITADEL's default org. It is used only to **refuse** ever registering that org. The registration command also asks ZITADEL which org really is the default and refuses if the setting is wrong.
@@ -141,7 +152,7 @@ Planned improvement: split staff management into a second robot with the smaller
 - Line up the assigned-assembly list with the assemblies' CROIP ids (section 6).
 - Remove the old "platform admin onboards" path, which the assignment check now blocks anyway.
 - Split the provisioner robot (section 7).
-- The org-registry lookup between services is currently unauthenticated on the internal network. It should be locked down.
+- ~~The org-registry lookup between services is unauthenticated.~~ Fixed 5 Nov 2026 (section 4).
 
 ---
 

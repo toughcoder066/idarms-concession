@@ -285,7 +285,9 @@ Every business query must include the authorised concession and Assembly boundar
 
 Required query pattern
 typescript
-const context = await resolveOrgContext(request.auth.homeOrgId!);
+// The auth plugin resolves this once per request: resolveOrgContext(homeOrgId, verifiedBearerToken)
+// calls GET /v1/org-context/me (ADR-0003 decision 10). Routes read it from request.auth.
+const context = { concessionId: request.auth.concessionId!, assemblyId: request.auth.assemblyId! };
 const property = await prisma.property.findFirst({
   where: {
     id: propertyId,

@@ -80,6 +80,20 @@ describe('session claims follow the org registry, like the services', () => {
     expect(claims.roles).toEqual([]);
     expect(claims.permissions).toEqual([]);
   });
+
+  it('asks the registry for the home org with that same access token', async () => {
+    const token = accessToken({ SECRETARY: [HOME] });
+    const lookup = vi.fn(async () => assemblyOrg);
+    await claimsFromAccessToken(token, lookup);
+    expect(lookup).toHaveBeenCalledExactlyOnceWith(HOME, token);
+  });
+
+  it('does not look up the registry without an access token', async () => {
+    const lookup = vi.fn(async () => assemblyOrg);
+    const claims = await claimsFromAccessToken(undefined, lookup);
+    expect(lookup).not.toHaveBeenCalled();
+    expect(claims.concessionId).toBeUndefined();
+  });
 });
 
 describe('a failed refresh ends the session instead of keeping the stale token', () => {

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // case deliberately leaves unset.
 vi.mock('dotenv/config', () => ({}));
 
-const KEYS = ['NODE_ENV', 'AUTH_MODE', 'HOST', 'DATABASE_URL', 'ZITADEL_PROJECT_ID'] as const;
+const KEYS = ['NODE_ENV', 'AUTH_MODE', 'HOST', 'DATABASE_URL', 'ZITADEL_PROJECT_ID', 'ORG_CONTEXT_URL'] as const;
 const saved = Object.fromEntries(KEYS.map((key) => [key, process.env[key]]));
 
 async function loadConfig(env: Partial<Record<(typeof KEYS)[number], string>>) {
@@ -71,5 +71,26 @@ describe('ZITADEL_PROJECT_ID', () => {
   it.each(['', 'not-a-number', '1234-5678'])('refuses %j', async (value) => {
     await expect(loadConfig({ NODE_ENV: 'test', ZITADEL_PROJECT_ID: value }))
       .rejects.toThrow(/Invalid environment configuration/);
+  });
+});
+
+describe('org-context URL guard', () => {
+  it('refuses production without ORG_CONTEXT_URL', async () => {
+    await expect(loadConfig({ NODE_ENV: 'production' })).rejects.toThrow('ORG_CONTEXT_URL must be set to an https:// URL');
+  });
+
+  it('refuses a plain http ORG_CONTEXT_URL in production', async () => {
+    await expect(loadConfig({ NODE_ENV: 'production', ORG_CONTEXT_URL: 'http://concessions.internal:3100' }))
+      .rejects.toThrow('ORG_CONTEXT_URL must be set to an https:// URL');
+  });
+
+  it('accepts an https ORG_CONTEXT_URL in production', async () => {
+    const config = await loadConfig({ NODE_ENV: 'production', ORG_CONTEXT_URL: 'https://concessions.internal' });
+    expect(config.orgContextUrl).toBe('https://concessions.internal');
+  });
+
+  it('keeps the local http default outside production', async () => {
+    const config = await loadConfig({ NODE_ENV: 'development' });
+    expect(config.orgContextUrl).toBe('http://localhost:3100');
   });
 });

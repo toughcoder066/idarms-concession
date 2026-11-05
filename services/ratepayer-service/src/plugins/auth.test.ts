@@ -27,6 +27,7 @@ vi.mock('../lib/org-context', () => ({
 }));
 
 import { config } from '../config';
+import { resolveOrgContext } from '../lib/org-context';
 import { registerRoutes } from '../modules/ratepayers/routes';
 import { registerAuthPlugin } from './auth';
 
@@ -205,6 +206,8 @@ describe('ZITADEL token verification', () => {
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ error: 'unauthorized' });
     expect(prisma.ratepayer.findMany).not.toHaveBeenCalled();
+    // An unverified token is never forwarded to the org registry.
+    expect(resolveOrgContext).not.toHaveBeenCalled();
   });
 
   it('refuses a valid token whose organisation has no iDARMS context', async () => {
@@ -232,6 +235,38 @@ describe('ZITADEL token verification', () => {
     const response = await app.inject({ method: 'GET', url: '/health/live' });
 
     expect(response.statusCode).toBe(200);
+  });
+});
+
+describe('org-context lookup', () => {
+  it('forwards the verified token with the home org taken from that token', async () => {
+    const bearer = await token();
+    const response = await list(`Bearer ${bearer}`);
+
+    expect(response.statusCode).toBe(200);
+    expect(resolveOrgContext).toHaveBeenCalledTimes(1);
+    expect(resolveOrgContext).toHaveBeenCalledWith(ORG_A, bearer);
+  });
+
+  it('takes the home org from the token, not from a dev header', async () => {
+    const bearer = await token();
+    await app.inject({
+      method: 'GET',
+      url: '/v1/ratepayers',
+      headers: { authorization: `Bearer ${bearer}`, 'x-idarms-org-id': ORG_B },
+    });
+
+    expect(resolveOrgContext).toHaveBeenCalledWith(ORG_A, bearer);
+    expect(resolveOrgContext).not.toHaveBeenCalledWith(ORG_B, expect.anything());
+  });
+
+  it('does not let a known org context stand in for permissions', async () => {
+    const claims = { [RESOURCE_OWNER]: ORG_A };
+    const response = await list(`Bearer ${await token({ claims })}`);
+
+    expect(resolveOrgContext).toHaveBeenCalled();
+    expect(response.statusCode).toBe(403);
+    expect(prisma.ratepayer.findMany).not.toHaveBeenCalled();
   });
 });
 

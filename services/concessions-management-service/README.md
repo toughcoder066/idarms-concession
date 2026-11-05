@@ -276,8 +276,9 @@ No human holds ZITADEL's `ORG_OWNER` or `PROJECT_OWNER` on the concession org. C
 and assembly administration happens through this service and the portal; the backend
 performs the ZITADEL operations with the provisioner key.
 
-`GET /v1/org-context/:orgId` answers from this table only. An unregistered or inactive
-org has no tenant. The database allows one `CONCESSION` row per concession and keeps
+`GET /v1/org-context/me` answers from this table only, for the home org of the caller's
+verified token and no other (ADR-0003 decision 10). An unregistered or inactive org has
+no tenant. The database allows one `CONCESSION` row per concession and keeps
 scope and `assembly_id` consistent.
 
 Assembly orgs are registered by onboarding. The concession org is registered with an

@@ -57,6 +57,11 @@ if (env.AUTH_MODE === 'disabled') {
   }
 }
 
+// The assigned-assembly check forwards the caller's bearer token here (ADR-0003 decision 10).
+if (env.NODE_ENV === 'production' && new URL(env.CROIP_INTEGRATION_URL).protocol !== 'https:') {
+  throw new Error('CROIP_INTEGRATION_URL must use https when NODE_ENV=production');
+}
+
 // Invitation emails link here, so it must be the real portal over HTTPS in production.
 if (env.NODE_ENV === 'production' && new URL(env.PORTAL_URL).protocol !== 'https:') {
   throw new Error('PORTAL_URL must use https when NODE_ENV=production');

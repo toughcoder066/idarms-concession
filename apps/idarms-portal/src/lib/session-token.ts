@@ -74,16 +74,20 @@ export interface SessionClaims {
 }
 
 /**
- * Session claims from a verified ZITADEL access token. The tenant and scope
+ * Session claims from the access token the portal received from ZITADEL's
+ * token endpoint (server side, never from the browser). It is decoded here,
+ * not verified; concessions-management and every service verify it. The tenant and scope
  * level come from the org registry, exactly as the services read them; a
  * missing registry entry means no tenant, never a guessed one.
  */
 export async function claimsFromAccessToken(
   accessToken?: string,
-  lookup: (orgId: string) => Promise<OrgContext | null> = resolveOrgContext,
+  lookup: (homeOrgId: string, accessToken: string) => Promise<OrgContext | null> = resolveOrgContext,
 ): Promise<SessionClaims> {
   const { userId, homeOrgId, roles } = rolesFromAccessToken(accessToken);
-  const orgContext = homeOrgId && roles.length > 0 ? await lookup(homeOrgId) : null;
+  // The lookup sends the same token, so concessions-management can only answer
+  // for this user's own home org.
+  const orgContext = accessToken && homeOrgId && roles.length > 0 ? await lookup(homeOrgId, accessToken) : null;
   return {
     userId,
     roles,

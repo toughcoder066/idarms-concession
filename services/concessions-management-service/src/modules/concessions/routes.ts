@@ -107,8 +107,15 @@ function fail(reply: FastifyReply, error?: string) {
 }
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/v1/org-context/:orgId', async (request, reply) => {
-    const { orgId } = request.params as { orgId: string };
+  // The caller's own tenant: the home org of the verified token, never an org the
+  // caller names. Knowing it grants nothing; every route still checks its own
+  // permissions and tenant (ADR-0003).
+  app.get('/v1/org-context/me', async (request, reply) => {
+    reply.header('cache-control', 'no-store');
+    const orgId = request.auth.homeOrgId;
+    if (!orgId) {
+      return reply.code(401).send({ error: 'home_org_missing', message: 'The access token has no home organisation claim' });
+    }
     const context = await resolveOrgContext(app.prisma, orgId);
     if (!context) {
       return reply.code(404).send({ error: 'not_found', message: 'No iDARMS context for this organization' });

@@ -239,7 +239,17 @@ T3. **`AUTH_MODE` defaults to `disabled`, and the only guard is `NODE_ENV=produc
 
 T4. **Replica handlers look up rows by id only**, and on update they overwrite `concessionId`/`assemblyId` from the event (`property.handler.ts:169-176`, `ratepayer.handler.ts:24-47`). A foreign or forged event can move a row to another tenant.
 
-T5. **`/v1/org-context` is public and unauthenticated.** Every service trusts it over plain HTTP for tenancy (`concessions-management-service/src/plugins/auth.ts:34`, `svc/*/src/lib/org-context.ts:21`). It caches nulls for 5 minutes.
+T5. **FIXED 2026-11-05 (ADR-0003 decision 10).**
+- The old route is replaced by `GET /v1/org-context/me`. It needs a fully verified token and answers only for that token's home org.
+- Callers in all ten services and the portal forward the verified bearer token. They accept an answer only for the expected org.
+- The cache is per org: 60 s for a context, 15 s for "not registered", and failures are never cached.
+- `https://` is required in production.
+- Tests:
+  - 21 route tests in `concessions-management-service/src/modules/orgs/org-context-route.test.ts` cover missing, malformed, wrong-key, wrong-issuer, wrong-audience, expired, not-yet-valid and `alg=none` tokens, cross-tenant attempts, and unregistered and inactive orgs.
+  - Client, plugin and config tests are in `ratepayer-service`; portal tests are in `apps/idarms-portal/src/lib`.
+- Live check with a real ZITADEL user token against all ten services and the portal: one registry lookup per service, then cached; bad tokens get 401 everywhere with no lookup.
+
+Original finding: **`/v1/org-context` is public and unauthenticated.** Every service trusts it over plain HTTP for tenancy (`concessions-management-service/src/plugins/auth.ts:34`, `svc/*/src/lib/org-context.ts:21`). It caches nulls for 5 minutes.
 
 T6. **The dev bootstrap creates a `croip-m2m` user inside iDARMS's own ZITADEL** and points `CROIP_ZITADEL_ISSUER` at it (`scripts/dev/zitadel-bootstrap.mjs:392-418,477-485`). The `CROIP_M2M` role grants `integration:sync` on iDARMS (`concessions-management-service/src/lib/roles.ts:271`). This blurs the two auth realms.
 

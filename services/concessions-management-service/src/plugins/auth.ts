@@ -29,7 +29,8 @@ function extractBearer(request: FastifyRequest): string | null {
 
 const RESOURCE_OWNER_CLAIM = 'urn:zitadel:iam:user:resourceowner:id';
 
-const PUBLIC_PATHS = ['/health/live', '/health/ready', '/metrics', '/docs', '/v1/org-context'];
+// The org registry is not public: /v1/org-context/me needs a verified token (ADR-0003).
+const PUBLIC_PATHS = ['/health/live', '/health/ready', '/metrics', '/docs'];
 
 function isPublicPath(url: string): boolean {
   const path = url.split('?')[0];

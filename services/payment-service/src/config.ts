@@ -47,6 +47,12 @@ if (env.AUTH_MODE === 'disabled') {
   }
 }
 
+// Tenant context is fetched with the caller's bearer token, so in production it must
+// travel over TLS to a configured registry (ADR-0003).
+if (env.NODE_ENV === 'production' && !env.ORG_CONTEXT_URL?.startsWith('https://')) {
+  throw new Error('ORG_CONTEXT_URL must be set to an https:// URL when NODE_ENV=production');
+}
+
 export const config = {
   nodeEnv: env.NODE_ENV,
   serviceName: env.SERVICE_NAME,
