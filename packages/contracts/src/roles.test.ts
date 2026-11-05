@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accessTokenProblem,
   allowedRolesToManage,
   canManageRole,
   canManageUserWithRoles,
@@ -198,5 +199,29 @@ describe('rolesInOrg', () => {
   it('returns nothing for an unknown or missing organization', () => {
     expect(rolesInOrg(grants, 'org-c')).toEqual([]);
     expect(rolesInOrg(grants, undefined)).toEqual([]);
+  });
+});
+
+describe('accessTokenProblem', () => {
+  // Claim names as ZITADEL v4.16 issues them to the portal (checked 5 Nov 2026).
+  const access = { iss: 'i', sub: 's', aud: ['a'], exp: 1, iat: 1, nbf: 1, jti: 'j-1', client_id: 'a' };
+
+  it('accepts a ZITADEL access token', () => {
+    expect(accessTokenProblem(access)).toBeNull();
+  });
+
+  it('refuses a ZITADEL ID token', () => {
+    const idToken = { iss: 'i', sub: 's', aud: ['a'], exp: 1, iat: 1, client_id: 'a', azp: 'a', at_hash: 'h', amr: ['pwd'], auth_time: 1, sid: 'x' };
+    expect(accessTokenProblem(idToken)).toBe('missing jti');
+  });
+
+  it('refuses a token without a jti', () => {
+    const { jti: _jti, ...rest } = access;
+    expect(accessTokenProblem(rest)).toBe('missing jti');
+    expect(accessTokenProblem({ ...access, jti: '' })).toBe('missing jti');
+  });
+
+  it.each(['at_hash', 'c_hash', 'nonce', 'auth_time', 'amr', 'acr', 'sid'])('refuses a jti token that also carries %s', (claim) => {
+    expect(accessTokenProblem({ ...access, [claim]: 'x' })).toBe(`ID-token claim ${claim}`);
   });
 });

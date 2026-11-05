@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config } from '../config';
 import { resolveOrgContext } from '../lib/org-context';
-import { capabilitiesForRoles, parseRoleGrants, rolesInOrg } from '../lib/roles';
+import { accessTokenProblem, capabilitiesForRoles, parseRoleGrants, rolesInOrg } from '../lib/roles';
 import { readScopeFromAuth, type ReadScope } from '../lib/tenancy';
 import type { AuthContext } from '../types/global';
 
@@ -82,6 +82,13 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
           audience: config.zitadelAudience,
         });
 
+        // Only access tokens are bearer tokens. A ZITADEL ID token for the portal passes
+        // the signature, issuer and audience checks too, so refuse it here (ADR-0003).
+        const tokenProblem = accessTokenProblem(payload);
+        if (tokenProblem) {
+          request.log.warn({ reason: tokenProblem }, 'Token refused: not an access token');
+          return reply.code(401).send({ error: 'wrong_token_type', message: 'An access token is required' });
+        }
         const roleGrants = parseRoleGrants(payload, config.zitadelProjectId);
         const resourceOwner = payload[RESOURCE_OWNER_CLAIM];
         const homeOrgId = typeof resourceOwner === 'string' && resourceOwner ? resourceOwner : undefined;

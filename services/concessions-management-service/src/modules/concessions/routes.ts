@@ -108,13 +108,17 @@ function fail(reply: FastifyReply, error?: string) {
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // The caller's own tenant: the home org of the verified token, never an org the
-  // caller names. Knowing it grants nothing; every route still checks its own
-  // permissions and tenant (ADR-0003).
+  // caller names. Only for users who hold an iDARMS role in that org; knowing it
+  // grants nothing, and every route still checks its own permissions and tenant
+  // (ADR-0003 decision 10).
   app.get('/v1/org-context/me', async (request, reply) => {
     reply.header('cache-control', 'no-store');
     const orgId = request.auth.homeOrgId;
     if (!orgId) {
       return reply.code(401).send({ error: 'home_org_missing', message: 'The access token has no home organisation claim' });
+    }
+    if (request.auth.roles.length === 0) {
+      return reply.code(403).send({ error: 'no_role', message: 'No iDARMS role in the home organisation' });
     }
     const context = await resolveOrgContext(app.prisma, orgId);
     if (!context) {

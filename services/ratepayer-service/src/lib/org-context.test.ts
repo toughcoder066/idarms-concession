@@ -112,6 +112,37 @@ describe('resolveOrgContext', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('shares one lookup between concurrent callers for the same org', async () => {
+    let release!: (response: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
+
+    const calls = Array.from({ length: 5 }, () => resolveOrgContext(ORG_A, TOKEN_A));
+    release(reply(200, contextA));
+
+    await expect(Promise.all(calls)).resolves.toEqual(Array(5).fill(contextA));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not share a lookup between orgs', async () => {
+    fetchMock.mockImplementation(async (_url, init) =>
+      reply(200, new Headers(init?.headers).get('authorization') === `Bearer ${TOKEN_A}` ? contextA : contextB));
+
+    const [a, b] = await Promise.all([resolveOrgContext(ORG_A, TOKEN_A), resolveOrgContext(ORG_B, TOKEN_B)]);
+
+    expect(a).toEqual(contextA);
+    expect(b).toEqual(contextB);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts a fresh lookup after a shared one fails', async () => {
+    fetchMock.mockResolvedValueOnce(reply(503)).mockResolvedValueOnce(reply(200, contextA));
+
+    await expect(Promise.all([resolveOrgContext(ORG_A, TOKEN_A), resolveOrgContext(ORG_A, TOKEN_A)]))
+      .resolves.toEqual([null, null]);
+    await expect(resolveOrgContext(ORG_A, TOKEN_A)).resolves.toEqual(contextA);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('fails closed on a network error without surfacing the token', async () => {
     fetchMock.mockRejectedValue(new Error(`connect ECONNREFUSED (sent Bearer ${TOKEN_A})`));
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});

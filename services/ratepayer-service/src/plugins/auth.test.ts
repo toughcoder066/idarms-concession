@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -108,9 +109,11 @@ const viewerOfOrgA: JWTPayload = {
   [ROLE_CLAIM]: { ASSEMBLY_VIEWER: { [ORG_A]: 'assembly-a.localhost' } },
 };
 
+// Shaped like a ZITADEL access token, which always carries a jti.
 async function token(options: TokenOptions = {}): Promise<string> {
   const jwt = new SignJWT(options.claims ?? viewerOfOrgA)
     .setProtectedHeader({ alg: 'RS256', kid: options.kid ?? KID })
+    .setJti(randomUUID())
     .setSubject('user-1')
     .setIssuer(options.issuer ?? ISSUER)
     .setAudience(options.audience ?? AUDIENCE)
@@ -235,6 +238,38 @@ describe('ZITADEL token verification', () => {
     const response = await app.inject({ method: 'GET', url: '/health/live' });
 
     expect(response.statusCode).toBe(200);
+  });
+});
+
+describe('token type', () => {
+  const idTokenShaped: Array<[string, JWTPayload]> = [
+    ['an ID token (at_hash, amr, auth_time, sid, azp)', {
+      at_hash: 'x', amr: ['pwd'], auth_time: now(), sid: 's-1', azp: AUDIENCE,
+    }],
+    ['a token carrying a nonce', { nonce: 'n-1' }],
+  ];
+
+  it.each(idTokenShaped)('refuses %s as a bearer token', async (_label, extra) => {
+    const response = await list(`Bearer ${await token({ claims: { ...viewerOfOrgA, ...extra } })}`);
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: 'wrong_token_type' });
+    expect(resolveOrgContext).not.toHaveBeenCalled();
+    expect(prisma.ratepayer.findMany).not.toHaveBeenCalled();
+  });
+
+  it('refuses a signed token without a jti', async () => {
+    const jwt = await new SignJWT(viewerOfOrgA)
+      .setProtectedHeader({ alg: 'RS256', kid: KID })
+      .setSubject('user-1')
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .setExpirationTime(now() + 300)
+      .sign(signingKey);
+    const response = await list(`Bearer ${jwt}`);
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: 'wrong_token_type' });
   });
 });
 

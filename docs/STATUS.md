@@ -235,7 +235,12 @@ Only `gis-service` fails closed (`zones/service.ts:9`). Found by the tenancy rev
 
 T2. **The portal registration server actions have no authorisation check.** They call CROIP with the shared machine credential for any logged-in user (`apps/idarms-portal/src/app/ratepayers/new/actions.ts`, `properties/new/actions.ts`). The middleware only requires a session. The `assemblyId` comes from the client form.
 
-T3. **`AUTH_MODE` defaults to `disabled`, and the only guard is `NODE_ENV=production`** (`svc/*/src/config.ts`, e.g. `ratepayer-service/src/config.ts:11,32`). In disabled mode, the tenant and permissions are taken from `x-idarms-*` request headers (`plugins/auth.ts:111-121`).
+T3. **FIXED.**
+- `AUTH_MODE` now defaults to `zitadel` (commit `17a11df`), and disabled mode needs a loopback `HOST` in development.
+- Since 2026-11-05 a service with `AUTH_MODE=disabled` also refuses to listen on any non-loopback host in every environment, `NODE_ENV=test` included (`svc/*/src/lib/listen-guard.ts`, called from `server.ts`).
+- Also since 2026-11-05, every service refuses ID tokens as bearer tokens (`accessTokenProblem`, ADR-0003 decision 10).
+
+Original finding: **`AUTH_MODE` defaults to `disabled`, and the only guard is `NODE_ENV=production`** (`svc/*/src/config.ts`, e.g. `ratepayer-service/src/config.ts:11,32`). In disabled mode, the tenant and permissions are taken from `x-idarms-*` request headers (`plugins/auth.ts:111-121`).
 
 T4. **Replica handlers look up rows by id only**, and on update they overwrite `concessionId`/`assemblyId` from the event (`property.handler.ts:169-176`, `ratepayer.handler.ts:24-47`). A foreign or forged event can move a row to another tenant.
 

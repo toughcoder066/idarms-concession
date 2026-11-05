@@ -365,6 +365,24 @@ export function rolesInOrg(grants: readonly RoleGrant[], orgId: string | undefin
   return [...new Set(grants.filter((grant) => grant.orgId === orgId).map((grant) => grant.role))];
 }
 
+/**
+ * Claims that only OIDC ID tokens carry. A ZITADEL ID token for the portal has
+ * the same issuer, audience and home organisation claim as its access token, so
+ * signature and audience checks alone would accept it as a bearer token.
+ */
+export const ID_TOKEN_CLAIMS = ['at_hash', 'c_hash', 'nonce', 'auth_time', 'amr', 'acr', 'sid'] as const;
+
+/**
+ * Why a verified JWT is not a ZITADEL access token, or null when it is one.
+ * ZITADEL access tokens always carry `jti`; ID tokens never do and carry ID-token
+ * claims instead. Anything that is not clearly an access token is refused.
+ */
+export function accessTokenProblem(claims: Record<string, unknown>): string | null {
+  if (typeof claims.jti !== 'string' || claims.jti === '') return 'missing jti';
+  const idClaim = ID_TOKEN_CLAIMS.find((claim) => claim in claims);
+  return idClaim ? `ID-token claim ${idClaim}` : null;
+}
+
 export function capabilitiesForRoles(roles: readonly string[]): Capability[] {
   const capabilities = new Set<Capability>();
   for (const role of roles) {

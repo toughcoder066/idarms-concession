@@ -1,5 +1,5 @@
-// Generated from packages/contracts/src/roles.ts. Do not edit by hand.
-// Run `node scripts/sync-role-model.mjs` after changing the canonical model.
+// Generated from scripts/shared-service-files. Do not edit by hand.
+// Run `node scripts/sync-role-model.mjs` after changing the shared copy.
 import { config } from '../config';
 
 export interface OrgContext {
@@ -14,6 +14,9 @@ export interface OrgContext {
 export const ORG_CONTEXT_TTL_MS = 60 * 1000;
 export const ORG_NOT_REGISTERED_TTL_MS = 15 * 1000;
 const cache = new Map<string, { value: OrgContext | null; expiresAt: number }>();
+// One lookup per org at a time. Sharing it between callers is safe: each caller's
+// token was verified before it got here, and the answer is about the org, not the user.
+const inFlight = new Map<string, Promise<OrgContext | null>>();
 
 function isOrgContextFor(value: unknown, orgId: string): value is OrgContext {
   if (!value || typeof value !== 'object') return false;
@@ -25,6 +28,29 @@ function isOrgContextFor(value: unknown, orgId: string): value is OrgContext {
   return false;
 }
 
+async function fetchOrgContext(homeOrgId: string, accessToken: string): Promise<OrgContext | null> {
+  try {
+    let base = config.orgContextUrl;
+    while (base.endsWith('/')) base = base.slice(0, -1);
+    const response = await fetch(base + '/v1/org-context/me', {
+      headers: { authorization: 'Bearer ' + accessToken },
+      signal: AbortSignal.timeout(2000),
+    });
+    if (response.status === 404) {
+      cache.set(homeOrgId, { value: null, expiresAt: Date.now() + ORG_NOT_REGISTERED_TTL_MS });
+      return null;
+    }
+    // Other failures are never cached: a short outage must not lock users out.
+    if (!response.ok) return null;
+    const value: unknown = await response.json();
+    if (!isOrgContextFor(value, homeOrgId)) return null;
+    cache.set(homeOrgId, { value, expiresAt: Date.now() + ORG_CONTEXT_TTL_MS });
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The caller's own tenant, from the org registry in concessions-management
  * (GET /v1/org-context/me). homeOrgId must be the home organisation claim of the
@@ -34,32 +60,18 @@ function isOrgContextFor(value: unknown, orgId: string): value is OrgContext {
  * different org, resolves to null, so the caller gets no tenant.
  */
 export async function resolveOrgContext(homeOrgId: string, accessToken: string): Promise<OrgContext | null> {
-  const now = Date.now();
   const cached = cache.get(homeOrgId);
-  if (cached && cached.expiresAt > now) return cached.value;
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const pending = inFlight.get(homeOrgId);
+  if (pending) return pending;
 
-  try {
-    let base = config.orgContextUrl;
-    while (base.endsWith('/')) base = base.slice(0, -1);
-    const response = await fetch(base + '/v1/org-context/me', {
-      headers: { authorization: 'Bearer ' + accessToken },
-      signal: AbortSignal.timeout(2000),
-    });
-    if (response.status === 404) {
-      cache.set(homeOrgId, { value: null, expiresAt: now + ORG_NOT_REGISTERED_TTL_MS });
-      return null;
-    }
-    if (!response.ok) return null;
-    const value: unknown = await response.json();
-    if (!isOrgContextFor(value, homeOrgId)) return null;
-    cache.set(homeOrgId, { value, expiresAt: now + ORG_CONTEXT_TTL_MS });
-    return value;
-  } catch {
-    return null;
-  }
+  const lookup = fetchOrgContext(homeOrgId, accessToken).finally(() => inFlight.delete(homeOrgId));
+  inFlight.set(homeOrgId, lookup);
+  return lookup;
 }
 
 /** Tests only. */
 export function clearOrgContextCache(): void {
   cache.clear();
+  inFlight.clear();
 }

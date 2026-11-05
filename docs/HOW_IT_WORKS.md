@@ -95,6 +95,8 @@ Now:
 - **Knowing your tenant opens nothing by itself.** Every service still checks your roles and filters every query by your assembly. The answer only tells it *which* assembly to filter by.
 - **Answers are remembered for at most a minute** (15 seconds for "this org isn't registered"), per org, never per person. So if an assembly is removed from the registry, the services stop using it within a minute. Login tokens themselves are never stored, logged or shown in error messages.
 - **In production the question must travel over HTTPS.** A service set up with a plain `http://` address for the registry refuses to start.
+- **Only people with an iDARMS role get an answer.** Someone who can sign in to ZITADEL but holds no iDARMS role in their own org is refused.
+- **Only the right kind of token is accepted.** ZITADEL hands the portal two tokens at sign-in: an *access token* (a key for calling APIs) and an *ID token* (a note saying who signed in). They look alike, so until now a service would have taken either. Now every service accepts only the access token.
 
 Two settings keep this honest:
 - `ZITADEL_PROJECT_OWNER_ORG_ID` is the iDARMS Concession org. Onboarding stops (error `project_owner_mismatch`) if this doesn't match the org registered as `CONCESSION`.
@@ -107,6 +109,8 @@ Two settings keep this honest:
 - The login page is iDARMS's own page (ADR-0004). Your browser talks only to the iDARMS portal. The portal talks to ZITADEL on the server side using the `idarms-login-client` robot.
 - After sign-in, the session is kept **on the server**. Your browser holds only a session cookie, never the ZITADEL access or ID tokens. That way a malicious script in the page has no token to steal.
 - If you sign in but have **no iDARMS role**, you are signed straight out again. A person with no role has no business in the portal.
+
+**Developers** can skip the sign-in when trying a single service locally: "header identity" lets you pretend to be any role in any assembly, but only on your own machine (a service in that mode refuses to accept connections from other computers and refuses to run in production). How to do that, and how the automated tests stand in for ZITADEL, is in `docs/LOCAL_DEVELOPMENT.md`.
 
 ---
 

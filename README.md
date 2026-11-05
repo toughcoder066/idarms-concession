@@ -12,6 +12,8 @@ baseline is documented in [docs/golden_template.md](docs/golden_template.md).
 
 New here? [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) explains sign-in, organisations, admin
 roles and assembly onboarding in plain English, and why they are set up that way.
+[docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) shows how to run it locally and test as
+different users and assemblies.
 
 ## Key rules
 
@@ -102,7 +104,8 @@ Local dev infrastructure (see `infra/docker/docker-compose.yml`):
   `5432` is avoided on purpose)
 - RabbitMQ: `127.0.0.1:5672` (management UI on `127.0.0.1:15672`)
 
-To run a single service locally (dev auth mode, no ZITADEL required):
+To run a single service locally (it uses ZITADEL auth by default; for header identity without
+ZITADEL, and for testing as different roles, see [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md)):
 
 ```bash
 cd services/ratepayer-service
@@ -460,8 +463,11 @@ the write; it does not mean iDARMS has synchronized a local replica.
 
 ### Development auth (no ZITADEL)
 
-Set `AUTH_MODE=disabled` only for local development. The configuration refuses this value when
-`NODE_ENV=production`. In dev mode the context comes from headers:
+Set `AUTH_MODE=disabled` only for local development and automated tests. The configuration
+refuses it when `NODE_ENV=production`, and a service in this mode refuses to listen on anything
+but a loopback host in every environment (tests use `inject()` and never listen). `pnpm as-user`
+sends these headers for any role in any locally registered org; see
+[docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md). In dev mode the context comes from headers:
 
 - `x-idarms-concession-id`
 - `x-idarms-assembly-id`
@@ -470,7 +476,8 @@ Set `AUTH_MODE=disabled` only for local development. The configuration refuses t
 - `x-idarms-authorized-org-ids` (comma-separated ZITADEL org IDs the caller may act in;
   staff endpoints validate the assembly's org against this list)
 - `x-idarms-org-id` (optional single active org; defaults `authorizedOrgIds` to it)
-- `x-idarms-permissions` (comma-separated; defaults to all service permissions)
+- `x-idarms-permissions` (comma-separated; when empty it falls back to the service's default
+  permissions, so send `none` for a user with no permissions)
 
 ## Regenerating services
 

@@ -12,6 +12,8 @@ export interface OrgContext {
 export const ORG_CONTEXT_TTL_MS = 60 * 1000;
 export const ORG_NOT_REGISTERED_TTL_MS = 15 * 1000;
 const cache = new Map<string, { value: OrgContext | null; expiresAt: number }>();
+// One lookup per org at a time; the answer is about the org, not the user.
+const inFlight = new Map<string, Promise<OrgContext | null>>();
 
 function isOrgContextFor(value: unknown, orgId: string): value is OrgContext {
   if (!value || typeof value !== 'object') return false;
@@ -31,10 +33,18 @@ function isOrgContextFor(value: unknown, orgId: string): value is OrgContext {
  * or an answer for another org, resolves to null: no tenant.
  */
 export async function resolveOrgContext(homeOrgId: string, accessToken: string): Promise<OrgContext | null> {
-  const now = Date.now();
   const cached = cache.get(homeOrgId);
-  if (cached && cached.expiresAt > now) return cached.value;
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const pending = inFlight.get(homeOrgId);
+  if (pending) return pending;
 
+  const lookup = fetchOrgContext(homeOrgId, accessToken).finally(() => inFlight.delete(homeOrgId));
+  inFlight.set(homeOrgId, lookup);
+  return lookup;
+}
+
+async function fetchOrgContext(homeOrgId: string, accessToken: string): Promise<OrgContext | null> {
+  const now = Date.now();
   const base = appConfig.serviceBaseUrls.concessions.replace(/\/+$/, '');
   if (process.env.NODE_ENV === 'production' && !base.startsWith('https://')) {
     console.error('Refusing the org-context lookup: NEXT_PUBLIC_CONCESSIONS_API_URL must be https:// in production');
@@ -64,4 +74,5 @@ export async function resolveOrgContext(homeOrgId: string, accessToken: string):
 /** Tests only. */
 export function clearOrgContextCache(): void {
   cache.clear();
+  inFlight.clear();
 }

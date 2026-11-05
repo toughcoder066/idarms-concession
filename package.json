@@ -27,7 +27,9 @@
     "event:publish": "node scripts/dev/publish-event.mjs",
     "db:up": "docker compose -f infra/docker/docker-compose.yml up -d",
     "db:down": "docker compose -f infra/docker/docker-compose.yml down",
-    "db:logs": "docker compose -f infra/docker/docker-compose.yml logs -f"
+    "db:logs": "docker compose -f infra/docker/docker-compose.yml logs -f",
+    "as-user": "node scripts/dev/as-user.mjs",
+    "test:auth:integration": "node scripts/dev/auth-integration-test.mjs"
   },
   "devDependencies": {
     "amqplib": "^2.2.0",
