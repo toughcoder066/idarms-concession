@@ -67,29 +67,38 @@ and two sample assemblies (AMA and LADMA) for local UI work.
 `127.0.0.1`, or `[::1]`. All work in this repository is local-only until explicitly
 changed.
 
-Export the local first-instance admin key once (it is written to gitignored `.secrets/`):
+ZITADEL calls use the `idarms-provisioner` machine identity: a machine user in the iDARMS
+Concession org with the single instance role `IAM_ORG_MANAGER`. `pnpm zitadel:bootstrap`
+creates it and writes its key to the gitignored `.secrets/zitadel-provisioner.json`. The
+first-instance admin key is not used here.
 
-```bash
-pnpm zitadel:export-key
-```
-
-Required local environment:
+Required local environment (the bootstrap prints the values):
 
 ```text
 ZITADEL_PROVISIONING_URL=http://localhost:8080
-ZITADEL_PROVISIONING_KEY_PATH=../../.secrets/zitadel-admin-sa.json
-ZITADEL_PROJECT_ID=<local iDARMS project ID>
-ZITADEL_PROJECT_OWNER_ORG_ID=<ZITADEL default org ID: owns the iDARMS project, never a tenant>
+ZITADEL_PROVISIONING_KEY_PATH=../../.secrets/zitadel-provisioner.json
+ZITADEL_PROJECT_ID=<iDARMS project id>
+ZITADEL_PROJECT_OWNER_ORG_ID=<iDARMS Concession org id: owns the iDARMS project>
+ZITADEL_DEFAULT_ORG_ID=<ZITADEL default org id: never registered in iDARMS>
+CROIP_INTEGRATION_URL=http://localhost:3090
 ACCESS_DIRECTORY_CACHE_TTL_MS=15000
 ```
 
-Onboarding needs the concession org to be registered first (409
-`concession_org_unregistered` otherwise); see "Organisations and the org registry" below.
+Before it creates anything, onboarding refuses with:
+
+- 409 `concession_org_unregistered` until the concession org is registered (see
+  "Organisations and the org registry" below);
+- 503 `project_owner_mismatch` if `ZITADEL_PROJECT_OWNER_ORG_ID` is not that org;
+- 409 `assembly_not_assigned` unless the assembly's CROIP id is on the concession's active
+  assigned-assembly list (`GET /v1/assigned-assemblies` on croip-integration-service,
+  called with the caller's own credentials; contract dates enforced). CROIP owns and
+  assigns assemblies; iDARMS never authors them;
+- 503 `assignment_check_unavailable` if that list cannot be read (fails closed).
 
 `POST /v1/assemblies/:id/onboard` runs a durable saga:
 
 1. Create the assembly's ZITADEL organization using the real assembly name.
-2. Grant the iDARMS project to that org. The grant includes every assembly-scoped
+2. Grant the iDARMS project to that org, from the concession org that owns it. The grant includes every assembly-scoped
    role **and** `CONCESSION_SUPER_ADMIN`; ZITADEL rejects an external super-admin
    grant unless that role is part of the target org's project grant.
 3. Add an external `CONCESSION_SUPER_ADMIN` user grant in the new org for every
@@ -259,9 +268,13 @@ iDARMS runs one concession with several assemblies, and has two organisational s
 
 | ZITADEL organisation | `zitadel_org_contexts` row | Holds |
 |---|---|---|
-| ZITADEL default org | none, never registered | Identity infrastructure: project, apps, machine users |
-| Dedicated concession org | `CONCESSION`, our concession id, `assembly_id` null | Concession-wide users (Concession Super Admin) |
-| One org per assembly | `ASSEMBLY`, same concession id, its assembly id | That assembly's staff |
+| ZITADEL default org | none, never registered | ZITADEL itself: its project, instance administration, the first-instance admin key, and `croip-m2m` (dev stand-in for CROIP's credential) |
+| iDARMS Concession org | `CONCESSION`, our concession id, `assembly_id` null | The iDARMS project, roles and apps; `idarms-provisioner` and `idarms-login-client`; concession-wide users (Concession Super Admin) |
+| One org per assembly | `ASSEMBLY`, same concession id, its assembly id | That assembly's staff, using the project through a project grant from the concession org |
+
+No human holds ZITADEL's `ORG_OWNER` or `PROJECT_OWNER` on the concession org. Concession
+and assembly administration happens through this service and the portal; the backend
+performs the ZITADEL operations with the provisioner key.
 
 `GET /v1/org-context/:orgId` answers from this table only. An unregistered or inactive
 org has no tenant. The database allows one `CONCESSION` row per concession and keeps
@@ -277,9 +290,11 @@ pnpm --filter @idarms/concessions-management-service org:register-concession \
 # production also needs --confirm-production
 ```
 
-It refuses ZITADEL's infrastructure org (`ZITADEL_PROJECT_OWNER_ORG_ID`, or
-`--infrastructure-org-id`), an org already registered as an assembly, a second concession
-org, and any concession other than the one the registry already uses. Each write is
+It refuses ZITADEL's default org (`ZITADEL_DEFAULT_ORG_ID`, or `--default-org-id`). It
+checks that setting against ZITADEL's actual default org with the provisioning key and
+refuses a mismatch (`default_org_mismatch`); in production the check must succeed
+(`default_org_unverified` otherwise). It also refuses an org already registered as an
+assembly, a second concession org, and any concession other than the one the registry already uses. Each write is
 audited (`org_registry.concession_org_registered`). Locally, `pnpm zitadel:bootstrap`
 creates the "iDARMS Concession" org and runs this command with `--sole-concession`.
 Local UI fixtures: `concession-admin` / `Password1!` and

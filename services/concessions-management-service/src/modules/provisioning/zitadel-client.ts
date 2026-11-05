@@ -84,8 +84,10 @@ export interface ZitadelProvisioningClient {
   createOrganization(name: string): Promise<ZitadelOrganization>;
   getOrganization(orgId: string): Promise<ZitadelOrganization | null>;
   findOrganizationByName(name: string): Promise<ZitadelOrganization | null>;
+  /** ZITADEL's default org: identity infrastructure, never registered in iDARMS. */
+  getDefaultOrganization(): Promise<ZitadelOrganization | null>;
   deleteOrganization(orgId: string): Promise<void>;
-  /** Runs in the org that owns the iDARMS project: ZITADEL infrastructure, never a tenant. */
+  /** Runs in the org that owns the iDARMS project: the iDARMS Concession org. */
   ensureProjectGrant(input: {
     projectOwnerOrgId: string;
     projectId: string;
@@ -212,20 +214,25 @@ export class HttpZitadelProvisioningClient implements ZitadelStaffClient {
     }
   }
 
+  // The v2 organization search needs only org.read, which the provisioner holds
+  // through IAM_ORG_MANAGER; the admin API search would need instance-level iam.read.
   async findOrganizationByName(name: string): Promise<ZitadelOrganization | null> {
-    const body = await this.request('POST', '/admin/v1/orgs/_search', {
+    const body = await this.request('POST', '/v2/organizations/_search', {
       body: {
         query: { limit: 100, offset: 0 },
-        queries: [{ nameQuery: { name } }],
+        queries: [{ nameQuery: { name, method: 'TEXT_QUERY_METHOD_EQUALS' } }],
       },
     });
     const match = (body?.result ?? []).find((org: { name?: string }) => org.name === name);
-    if (!match?.id) return null;
-    return {
-      orgId: String(match.id),
-      name: String(match.name ?? name),
-      primaryDomain: typeof match.primaryDomain === 'string' ? match.primaryDomain : undefined,
-    };
+    return match?.id ? toOrganization(match) : null;
+  }
+
+  async getDefaultOrganization(): Promise<ZitadelOrganization | null> {
+    const body = await this.request('POST', '/v2/organizations/_search', {
+      body: { query: { limit: 1, offset: 0 }, queries: [{ defaultQuery: {} }] },
+    });
+    const match = body?.result?.[0];
+    return match?.id ? toOrganization(match) : null;
   }
 
   async deleteOrganization(orgId: string): Promise<void> {
@@ -790,4 +797,12 @@ function errorMessage(body: any, fallback: string): string {
   if (body && typeof body === 'object' && typeof body.message === 'string') return body.message;
   if (typeof body === 'string' && body.trim()) return body.slice(0, 500);
   return fallback;
+}
+
+function toOrganization(org: { id?: unknown; name?: unknown; primaryDomain?: unknown }): ZitadelOrganization {
+  return {
+    orgId: String(org.id),
+    name: String(org.name ?? ''),
+    primaryDomain: typeof org.primaryDomain === 'string' ? org.primaryDomain : undefined,
+  };
 }

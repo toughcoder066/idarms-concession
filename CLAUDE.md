@@ -69,7 +69,19 @@ Two RabbitMQ roles exist. Do not mix them. (1) iDARMS's own internal broker betw
 - **Never use CROIP's unscoped list endpoints** (`GET /v1/properties`, `GET /v1/ratepayers/directory`) to build the replica. They are not scoped to us (spec gap G5).
 - **Never assume one assembly.** A concession has one or more assemblies and the set changes over time. Scope by concession and assembly everywhere.
 - **Local people are local.** Never create field agents or staff in CROIP, and never send staff PII to CROIP. Send only the opaque staff reference.
-- **Two organisational scopes, and ZITADEL's default org is not a tenant** (ADR-0003 decision 7). The dedicated concession org is registered as `CONCESSION` (our concession id, no assembly) and is the home org of concession-wide users. Each assembly org is registered as `ASSEMBLY` (same concession id, its assembly id). ZITADEL's default org is identity infrastructure: never register it, never put iDARMS staff in it. There is no `PORTFOLIO` scope. Never hard-code org ids or fall back to guessing a tenant; resolve it from the org registry.
+- **Two organisational scopes. ZITADEL runs ZITADEL; the iDARMS Concession org runs iDARMS** (ADR-0003 decisions 7 to 9).
+  - **The iDARMS Concession org** owns the iDARMS project (roles, portal and API apps) and iDARMS's machine identities. It is registered as `CONCESSION` (our concession id, no assembly) and is the home org of concession-wide users.
+  - **Each assembly org** is registered as `ASSEMBLY` (same concession id, its assembly id). It receives the project through a project grant and never owns it.
+  - **ZITADEL's default org** holds only ZITADEL's own resources, the first-instance admin key and `croip-m2m`, which is a dev stand-in for CROIP's credential and not an iDARMS identity. Never register it, never put iDARMS staff or iDARMS identities in it.
+  - There is no `PORTFOLIO` scope. Never hard-code org ids or fall back to guessing a tenant; resolve it from the org registry.
+- **Business roles are not ZITADEL manager roles.** No human gets `ORG_OWNER` or `PROJECT_OWNER` on the concession org.
+  - Concession and assembly administration happen in the iDARMS portal and API, never the ZITADEL console. ZITADEL changes are made by the backend provisioner, the bootstrap or operator commands.
+  - The Platform Super Admin is an operator role outside iDARMS: no iDARMS project role, no bypass.
+- **iDARMS never creates assemblies.** Onboarding provisions a ZITADEL org only for an assembly on the concession's active assigned-assembly list (CROIP assigns them). Refuse the rest.
+- **Machine identities get one narrow role each.**
+  - `idarms-login-client` gets `IAM_LOGIN_CLIENT`.
+  - `idarms-provisioner` gets `IAM_ORG_MANAGER`, the narrowest role that can create orgs. Its wider powers are recorded in ADR-0003 decision 8.
+  - Never use the first-instance admin key in a service.
 - **Tenant context comes from the verified token**, never from a request body, query string or event payload (`request.auth.concessionId` / `assemblyId`). Every query filters by both. No admin bypass without an approved oversight use case.
 - **Transactional outbox only.** Never publish to RabbitMQ or call CROIP inside a business transaction. Business row, audit record and outbox event commit together.
 - **Event IDs are stable.** A retry re-sends the **same** event ID and payload. Never create a new financial event to retry. Never reuse an ID with different content. Derive the CROIP event ID deterministically from the internal event ID so replays cannot mint new IDs.

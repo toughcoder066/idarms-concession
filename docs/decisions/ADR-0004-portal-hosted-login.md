@@ -19,7 +19,7 @@ ZITADEL has no password grant (OAuth 2.1 removes it). Its supported route for a 
    - It sends the browser to the returned URL, which is the portal's own Auth.js callback carrying the code.
 
    Auth.js then checks state and PKCE and exchanges the code as before, so access, ID and refresh tokens and everything in ADR-0003 are unchanged.
-3. **The portal authenticates to ZITADEL as a dedicated machine user** `idarms-portal-login` with the instance role `IAM_LOGIN_CLIENT`, using a JSON key in `.secrets/` (gitignored). `pnpm zitadel:login-client` sets this up, and so does the bootstrap. The key is server-only: never in the browser, never logged.
+3. **The portal authenticates to ZITADEL as a dedicated machine user** `idarms-login-client` in the iDARMS Concession org (originally `idarms-portal-login` in ZITADEL's default org; replaced and deleted under ADR-0003 decision 9) with the instance role `IAM_LOGIN_CLIENT`, using a JSON key in `.secrets/` (gitignored). `pnpm zitadel:login-client` sets this up, and so does the bootstrap. The key is server-only: never in the browser, never logged.
 4. **Codes before passwords.** The login client can set any user's password, so the portal sets a password only in these cases:
    - **Reset:** after ZITADEL accepts a reset code.
    - **Invitation:** after ZITADEL verifies the invite code, and only then the first password.

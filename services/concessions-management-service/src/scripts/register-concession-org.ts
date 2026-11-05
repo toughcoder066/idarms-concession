@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '../../generated/prisma';
 import { config } from '../config';
 import { ConcessionOrgRegistrationError, registerConcessionOrg } from '../modules/orgs/register-concession-org';
+import { HttpZitadelProvisioningClient } from '../modules/provisioning/zitadel-client';
 
 /**
  * Operator command: register the dedicated CONCESSION-scoped ZITADEL org in the
@@ -10,7 +11,11 @@ import { ConcessionOrgRegistrationError, registerConcessionOrg } from '../module
  *
  *   pnpm --filter @idarms/concessions-management-service org:register-concession \
  *     --org-id <zitadel org id> --concession-id <uuid> --actor <who> [--domain <primary domain>] \
- *     [--infrastructure-org-id <id>] [--apply] [--confirm-production]
+ *     [--default-org-id <id>] [--apply] [--confirm-production]
+ *
+ * ZITADEL's default org (--default-org-id, else ZITADEL_DEFAULT_ORG_ID) is never
+ * registered. The command checks it against ZITADEL's actual default org with the
+ * provisioning key; in production that check must succeed.
  *
  * --sole-concession (local bootstrap only) uses the one concession in this
  * database instead of --concession-id, and refuses if there is not exactly one.
@@ -26,7 +31,7 @@ async function main(): Promise<void> {
   const actorId = option(args, '--actor');
   const soleConcession = args.includes('--sole-concession');
   let concessionId = option(args, '--concession-id');
-  const infrastructureOrgId = option(args, '--infrastructure-org-id') ?? config.zitadelProjectOwnerOrgId ?? '';
+  const defaultOrgId = option(args, '--default-org-id') ?? config.zitadelDefaultOrgId ?? '';
   const apply = args.includes('--apply');
 
   if (!orgId || !actorId || (!concessionId && !soleConcession)) {
@@ -53,10 +58,13 @@ async function main(): Promise<void> {
       }
       concessionId = concessions[0].id;
     }
+    const actualDefaultOrgId = await readDefaultOrgId();
     const result = await registerConcessionOrg(prisma, {
       orgId,
       concessionId: concessionId!,
-      infrastructureOrgId,
+      defaultOrgId,
+      actualDefaultOrgId,
+      requireVerifiedDefaultOrg: config.nodeEnv === 'production',
       primaryDomain: option(args, '--domain'),
       actorId,
       requestId: randomUUID(),
@@ -72,6 +80,25 @@ async function main(): Promise<void> {
     throw err;
   } finally {
     await prisma.$disconnect();
+  }
+}
+
+/** ZITADEL's actual default org, or undefined (with a warning) when it cannot be read. */
+async function readDefaultOrgId(): Promise<string | undefined> {
+  if (!config.zitadelProvisioningKeyPath) {
+    console.warn('No ZITADEL_PROVISIONING_KEY_PATH: ZITADEL_DEFAULT_ORG_ID is not checked against ZITADEL.');
+    return undefined;
+  }
+  try {
+    const client = new HttpZitadelProvisioningClient({
+      baseUrl: config.zitadelProvisioningUrl,
+      keyPath: config.zitadelProvisioningKeyPath,
+      timeoutMs: config.zitadelProvisioningTimeoutMs,
+    });
+    return (await client.getDefaultOrganization())?.orgId;
+  } catch (err) {
+    console.warn(`Could not read ZITADEL's default org: ${err instanceof Error ? err.message : String(err)}`);
+    return undefined;
   }
 }
 

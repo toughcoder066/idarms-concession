@@ -10,6 +10,9 @@ Full architecture and build rules live in
 [docs/IDARMS_MASTER_SPEC.md](docs/IDARMS_MASTER_SPEC.md). The per-service engineering
 baseline is documented in [docs/golden_template.md](docs/golden_template.md).
 
+New here? [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) explains sign-in, organisations, admin
+roles and assembly onboarding in plain English, and why they are set up that way.
+
 ## Key rules
 
 - **Microservices only** — exactly 1 frontend (`apps/idarms-portal`) and 11 backend services
@@ -210,49 +213,53 @@ local development.
 
 ```bash
 pnpm zitadel:up          # start ZITADEL (Traefik + API + Login UI + Postgres)
-pnpm zitadel:bootstrap   # idempotent provisioning of project, apps, roles, users, action
+pnpm zitadel:bootstrap   # idempotent: concession org, project, apps, roles, grants, machine identities
 ```
 
-The bootstrap creates:
+Organisations (ADR-0003 decision 7). ZITADEL is the identity infrastructure; iDARMS is the
+business application, and normal administration happens in the iDARMS portal, not the
+ZITADEL console.
 
-- Project **iDARMS** with `projectRoleAssertion` enabled (required for role claims).
-- OIDC web app **idarms-portal** (authorization-code + refresh, JWT access tokens,
-  `accessTokenRoleAssertion`, `idTokenRoleAssertion`).
-- API app **idarms-api**.
-- **8 human project roles** — `CONCESSION_SUPER_ADMIN`, `ASSEMBLY_ADMIN`,
-  `FIELD_OPS_MANAGER`, `FINANCE_OFFICER`, `SECRETARY`, `CASHIER`, `FIELD_AGENT`,
-  `ASSEMBLY_VIEWER` — plus the machine role `CROIP_M2M`. Capabilities such as
-  `property:verify`, `fee_fixing:manage` and `concession:reporting:read` are bundled
-  into these roles by the shared model in `packages/contracts/src/roles.ts`; they are
-  not separate ZITADEL roles. The bootstrap retires the old flat permission roles.
-- The dedicated concession organisation **iDARMS Concession** (name: `IDARMS_CONCESSION_ORG_NAME`),
-  granted the iDARMS project's human roles, and registered in the org registry as
-  `CONCESSION` (our concession id, no assembly) with `org:register-concession`.
-- Human user `concession-admin` (`CONCESSION_SUPER_ADMIN`) in the concession org, password
-  `Password1!`. Older bootstraps created it, and `field-agent`, in ZITADEL's default org;
-  the bootstrap recreates `concession-admin` in the concession org and removes iDARMS roles
-  from people left in the default org. Field agents and other assembly staff are invited
-  into their assembly org through the portal.
-- Machine user `croip-m2m` (JWT client-credentials) as the stand-in for the CROIP-issued
-  M2M client.
-- No `idarmsContext` token action and no `concessionId`/`assemblyId` user metadata:
-  tenant context is resolved from ZITADEL organization claims through the
-  `orgId → {concessionId, assemblyId, scope}` registry exposed by the concessions service.
-
-Organisations (ADR-0003 decision 7):
-
-| ZITADEL organisation | Registry | Holds |
+| ZITADEL organisation | Org registry | Holds |
 |---|---|---|
-| ZITADEL default org | not a tenant, never registered | Project, apps, machine users |
-| iDARMS Concession | `CONCESSION`, concession id, no assembly | Concession-wide users |
-| One org per assembly | `ASSEMBLY`, same concession id, its assembly id | That assembly's staff |
+| ZITADEL default org | never registered | ZITADEL's own project and console clients, instance administration, the first-instance admin key, and `croip-m2m` (a dev stand-in for CROIP's own credential) |
+| **iDARMS Concession** | `CONCESSION`, concession id, no assembly | The **iDARMS project** (9 roles, `idarms-portal` and `idarms-api` apps), the machine identities `idarms-login-client` and `idarms-provisioner`, concession-wide users |
+| One org per assembly | `ASSEMBLY`, same concession id, its assembly id | That assembly's staff; uses the project through a project grant from the concession org |
 
-There is no `PORTFOLIO` scope. Staging and production register the concession org with the
-operator command in `services/concessions-management-service/README.md`.
+The bootstrap, against the local ZITADEL:
 
-Admin console: <http://localhost:8080> (`zitadel-admin@zitadel.localhost` / `Password1!`).
-The bootstrap is idempotent and safe to re-run; secrets are printed on first creation only
-(and are stored in `apps/idarms-portal/.env.local`).
+- Finds or creates the **iDARMS Concession** org (name: `IDARMS_CONCESSION_ORG_NAME`) and applies
+  the iDARMS login colors to it (the project uses its owner's branding).
+- Creates the **iDARMS** project in that org with `projectRoleAssertion`, the OIDC web app
+  **idarms-portal** (authorization code + refresh, JWT access tokens, role assertion) and
+  the API app **idarms-api**. Their client ids and secrets go to the gitignored
+  `.secrets/zitadel-idarms-apps.json`; secrets are never printed.
+- Creates the **9 project roles**: `CONCESSION_SUPER_ADMIN`, `ASSEMBLY_ADMIN`, `FIELD_OPS_MANAGER`,
+  `FINANCE_OFFICER`, `SECRETARY`, `CASHIER`, `FIELD_AGENT`, `ASSEMBLY_VIEWER` and the machine
+  role `CROIP_M2M`. Capabilities such as `property:verify` are bundled into these roles by
+  `packages/contracts/src/roles.ts`; they are not separate ZITADEL roles.
+- Ensures `concession-admin` (`CONCESSION_SUPER_ADMIN`, password `Password1!`) in the concession
+  org. It holds only that iDARMS role: no human gets ZITADEL's `ORG_OWNER` or `PROJECT_OWNER`
+  on the concession org, and the bootstrap reports any that exist.
+- Grants the project to every existing assembly org and recreates their user grants (and
+  the super admin's grants there) by copying them from the previous project.
+- Creates the iDARMS machine identities in the concession org, each with exactly one
+  instance role and a key in `.secrets/` (never printed):
+  - `idarms-login-client`: `IAM_LOGIN_CLIENT`, for the portal-hosted login (ADR-0004).
+  - `idarms-provisioner`: `IAM_ORG_MANAGER`, for assembly onboarding and staff management.
+    It is the narrowest ZITADEL role that can create organisations; see ADR-0003 for what
+    else it allows.
+- Leaves `croip-m2m` and everything else in ZITADEL's default org unchanged.
+- Registers the concession org in the org registry with `org:register-concession`.
+
+The **previous iDARMS project**, owned by ZITADEL's default org, is only read, and only if it
+still exists. In local development it and the older `idarms-portal-login` machine user were
+deleted on 5 Nov 2026 with owner approval (ADR-0003 decision 9). Staging and production register the concession org with the operator
+command in `services/concessions-management-service/README.md`.
+
+Admin console (operators only): <http://localhost:8080> (`zitadel-admin@zitadel.localhost` /
+`Password1!`). The bootstrap is idempotent and safe to re-run; it prints which values go into
+each `.env` file and where the secrets are.
 
 ### Assembly onboarding (local)
 
@@ -265,11 +272,12 @@ grants every existing super admin in the new org, optionally invites the first
 cache. Saga state lives in `assembly_onboardings`; retries clean up a prior partial org
 instead of creating a duplicate.
 
-Export the local admin key once:
-
-```bash
-pnpm zitadel:export-key   # writes gitignored .secrets/zitadel-admin-sa.json
-```
+Onboarding provisions only an assembly that CROIP has assigned to the concession: the
+assembly's CROIP id must be on the active assigned-assembly list of
+`croip-integration-service` (`CROIP_INTEGRATION_URL`), or it is refused with 409
+`assembly_not_assigned`. ZITADEL calls use the `idarms-provisioner` key
+(`.secrets/zitadel-provisioner.json`, written by the bootstrap), never the first-instance
+admin key.
 
 The provisioning client hard-rejects any host other than `localhost`, `127.0.0.1`, or
 `[::1]`, enforcing the local-only scope lock. See
@@ -286,15 +294,15 @@ on the server; the browser never visits ZITADEL (ADR-0004). After `pnpm zitadel:
 AUTH_SECRET=<openssl rand -base64 32>
 AUTH_URL=http://localhost:3000                  # portal origin; https in production
 ZITADEL_ISSUER=http://localhost:8080
-ZITADEL_CLIENT_ID=<web app client id>          # printed by bootstrap
-ZITADEL_CLIENT_SECRET=<web app client secret>  # printed by bootstrap
-ZITADEL_PROJECT_ID=<iDARMS project id>
-ZITADEL_LOGIN_CLIENT_KEY_PATH=<repo>/.secrets/zitadel-portal-login-client.json
+ZITADEL_CLIENT_ID=<portal client id>          # printed by bootstrap
+ZITADEL_CLIENT_SECRET=<portal client secret>  # in .secrets/zitadel-idarms-apps.json
+ZITADEL_PROJECT_ID=<iDARMS project id>        # printed by bootstrap
+ZITADEL_LOGIN_CLIENT_KEY_PATH=<repo>/.secrets/zitadel-idarms-login-client.json
 ```
 
-`pnpm zitadel:login-client` creates the `idarms-portal-login` machine user with the
-instance role `IAM_LOGIN_CLIENT`, writes its key to `.secrets/` (gitignored, never
-printed) and points the `idarms-portal` app's login page at the portal.
+`pnpm zitadel:login-client` creates the `idarms-login-client` machine user in the iDARMS
+Concession org with the instance role `IAM_LOGIN_CLIENT`, writes its key to `.secrets/`
+(gitignored, never printed) and points the `idarms-portal` app's login page at the portal.
 
 Run `pnpm --filter @idarms/idarms-portal dev` and open <http://localhost:3000/login>.
 The portal's own pages cover sign-in (`/login`), forgot and reset password

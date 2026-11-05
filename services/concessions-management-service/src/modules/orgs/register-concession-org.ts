@@ -6,9 +6,12 @@ import { writeAudit } from '../concessions/audit';
  * (ADR-0003): scope CONCESSION, our concession id, no assembly. It is the home
  * org of concession-wide users such as the Concession Super Admin.
  *
+ * The same org owns the iDARMS project and grants it to the assembly orgs.
+ *
  * Refuses, and writes nothing, when:
- *   - the org is ZITADEL's own infrastructure org (the org that owns the
- *     iDARMS project, normally the instance default org), which is never a tenant;
+ *   - the configured ZITADEL default org differs from ZITADEL's actual default org,
+ *     or (in production) the actual one could not be checked;
+ *   - the org is ZITADEL's default org, which is identity infrastructure only;
  *   - the concession does not exist here;
  *   - the registry already maps any org to a different concession (iDARMS runs one concession);
  *   - the org is already registered as an assembly org;
@@ -26,8 +29,12 @@ export class ConcessionOrgRegistrationError extends Error {
 export interface RegisterConcessionOrgInput {
   orgId: string;
   concessionId: string;
-  /** The ZITADEL infrastructure org; required so it can never be registered by mistake. */
-  infrastructureOrgId: string;
+  /** ZITADEL's default org (ZITADEL_DEFAULT_ORG_ID); required so it is never registered. */
+  defaultOrgId: string;
+  /** ZITADEL's actual default org, read from ZITADEL; undefined when it could not be read. */
+  actualDefaultOrgId?: string;
+  /** Production: refuse unless actualDefaultOrgId was read. */
+  requireVerifiedDefaultOrg?: boolean;
   primaryDomain?: string;
   actorId: string;
   requestId: string;
@@ -53,14 +60,20 @@ export async function registerConcessionOrg(
   prisma: PrismaClient,
   input: RegisterConcessionOrgInput,
 ): Promise<RegisterConcessionOrgResult> {
-  const { orgId, concessionId, infrastructureOrgId } = input;
+  const { orgId, concessionId, defaultOrgId, actualDefaultOrgId } = input;
   if (!ZITADEL_ID.test(orgId)) refuse(`--org-id must be a numeric ZITADEL org id, got "${orgId}".`, 'invalid_org_id');
-  if (!ZITADEL_ID.test(infrastructureOrgId)) {
-    refuse('The ZITADEL infrastructure org id is required (ZITADEL_PROJECT_OWNER_ORG_ID or --infrastructure-org-id).', 'infrastructure_org_unknown');
+  if (!ZITADEL_ID.test(defaultOrgId)) {
+    refuse('The ZITADEL default org id is required (ZITADEL_DEFAULT_ORG_ID or --default-org-id).', 'default_org_unknown');
+  }
+  if (actualDefaultOrgId !== undefined && actualDefaultOrgId !== defaultOrgId) {
+    refuse(`ZITADEL_DEFAULT_ORG_ID is ${defaultOrgId}, but ZITADEL's default org is ${actualDefaultOrgId}. Fix the setting first.`, 'default_org_mismatch');
+  }
+  if (actualDefaultOrgId === undefined && input.requireVerifiedDefaultOrg) {
+    refuse('Could not read the ZITADEL default org to check ZITADEL_DEFAULT_ORG_ID.', 'default_org_unverified');
   }
   if (!UUID.test(concessionId)) refuse(`--concession-id must be a UUID, got "${concessionId}".`, 'invalid_concession_id');
-  if (orgId === infrastructureOrgId) {
-    refuse(`Org ${orgId} is ZITADEL's infrastructure org. It is never an iDARMS tenant; create a dedicated concession org.`, 'infrastructure_org');
+  if (orgId === defaultOrgId) {
+    refuse(`Org ${orgId} is ZITADEL's default org. It is identity infrastructure only; use the dedicated iDARMS Concession org.`, 'default_org');
   }
 
   const concession = await prisma.concessionContract.findUnique({ where: { id: concessionId }, select: { id: true } });

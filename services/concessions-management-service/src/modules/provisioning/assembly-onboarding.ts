@@ -46,7 +46,7 @@ export interface OnboardingActor {
 
 export interface OnboardingConfig {
   projectId: string;
-  /** The ZITADEL org that owns the iDARMS project (infrastructure, not a tenant). */
+  /** The ZITADEL org that owns the iDARMS project: the iDARMS Concession org. */
   projectOwnerOrgId: string;
 }
 
@@ -54,6 +54,8 @@ export interface OnboardAssemblyDeps {
   prisma: PrismaClient;
   zitadel: ZitadelProvisioningClient;
   config: OnboardingConfig;
+  /** True when the CROIP assembly is on the concession's active assigned-assembly list. */
+  isAssigned: (croipAssemblyId: string) => Promise<boolean>;
   audit: (input: AuditInput) => Promise<void>;
   invalidateAccessDirectory: (userIds: readonly string[]) => void;
 }
@@ -185,8 +187,18 @@ async function runOnboardAssembly(
       { assemblyId, concessionId, assemblyName: assembly.assemblyName },
     );
   }
+  // The concession org owns the iDARMS project and grants it to assembly orgs (ADR-0003).
+  if (config.projectOwnerOrgId !== concessionOrg) {
+    throw new OnboardingError(
+      'ZITADEL_PROJECT_OWNER_ORG_ID is not the registered concession org.',
+      'project_owner_mismatch',
+      503,
+      false,
+      { assemblyId, concessionId, assemblyName: assembly.assemblyName },
+    );
+  }
 
-  const existingRegistry = await prisma.zitadelOrgContext.findUnique({ where: { assemblyId } });
+  const existingRegistry =await prisma.zitadelOrgContext.findUnique({ where: { assemblyId } });
   if (existingRegistry?.status === 'ACTIVE') {
     const holders = await zitadel.listProjectRoleHolders({
       orgId: concessionOrg,
@@ -203,7 +215,40 @@ async function runOnboardAssembly(
     };
   }
 
-  const existingSaga = await prisma.assemblyOnboarding.findUnique({ where: { assemblyId } });
+  // CROIP owns and assigns assemblies; iDARMS only provisions one that is assigned to
+  // the concession right now (the assigned-assembly list, contract dates enforced).
+  if (!assembly.croipAssemblyId) {
+    throw new OnboardingError(
+      'Assembly has no CROIP assembly id, so its assignment cannot be checked.',
+      'assembly_not_assigned',
+      409,
+      false,
+      { assemblyId, concessionId, assemblyName: assembly.assemblyName },
+    );
+  }
+  let assigned: boolean;
+  try {
+    assigned = await deps.isAssigned(assembly.croipAssemblyId);
+  } catch (error) {
+    throw new OnboardingError(
+      `Could not check the assigned-assembly list: ${errorMessage(error)}`,
+      'assignment_check_unavailable',
+      503,
+      false,
+      { assemblyId, concessionId, assemblyName: assembly.assemblyName },
+    );
+  }
+  if (!assigned) {
+    throw new OnboardingError(
+      'Assembly is not on the concession\'s active assigned-assembly list.',
+      'assembly_not_assigned',
+      409,
+      false,
+      { assemblyId, concessionId, assemblyName: assembly.assemblyName },
+    );
+  }
+
+  const existingSaga =await prisma.assemblyOnboarding.findUnique({ where: { assemblyId } });
   const attempts = (existingSaga?.attempts ?? 0) + 1;
 
   // Clean restart: never begin a new attempt while a prior partial org may exist.

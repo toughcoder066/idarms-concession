@@ -11,8 +11,10 @@ import type { ZitadelProvisioningClient } from './zitadel-client';
 const assemblyId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const concessionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const projectId = 'project-1';
-const projectOwnerOrgId = 'zitadel-infra-1';
+const croipAssemblyId = 'croip-asm-1';
 const concessionOrgId = 'concession-org-1';
+// The concession org owns the iDARMS project (ADR-0003).
+const projectOwnerOrgId = concessionOrgId;
 const assemblyName = 'Accra Metropolitan Assembly';
 const firstAdmin = { email: 'admin@assembly.local', firstName: 'Ada', lastName: 'Admin' };
 
@@ -29,6 +31,7 @@ function createFakePrisma(options: FakePrismaOptions = {}) {
       assemblyCode: 'AMA',
       assemblyName,
       zitadelOrgId: null as string | null,
+      croipAssemblyId: croipAssemblyId as string | null,
     },
     registry: new Map<string, any>(),
     // The CONCESSION-scoped org, kept apart from the assembly rows the tests count.
@@ -174,6 +177,7 @@ function createFakeZitadel(options: FakeZitadelOptions = {}) {
       primaryDomain: `${orgId}.localhost`,
     })),
     findOrganizationByName: vi.fn(async () => options.orphan ?? null),
+    getDefaultOrganization: vi.fn(async () => ({ orgId: 'org-zitadel-default', name: 'ZITADEL' })),
     deleteOrganization: vi.fn(async (orgId: string) => {
       calls.push({ method: 'deleteOrganization', args: orgId });
       if (shouldFail('deleteOrganization')) throw new Error('delete failed');
@@ -231,6 +235,7 @@ function makeDeps(options: {
       prisma,
       zitadel: client,
       config: { projectId, projectOwnerOrgId },
+      isAssigned: async (id: string) => id === croipAssemblyId,
       audit,
       invalidateAccessDirectory: invalidate,
     },
@@ -479,6 +484,7 @@ describe('onboardAssembly', () => {
       prisma,
       zitadel: client,
       config: { projectId, projectOwnerOrgId },
+      isAssigned: async (id: string) => id === croipAssemblyId,
       audit: async () => undefined,
       invalidateAccessDirectory: () => undefined,
     };
@@ -512,6 +518,39 @@ describe('onboardAssembly', () => {
     const { deps, calls } = makeDeps({ prisma: { noConcessionOrg: true } });
     await expect(onboardAssembly(deps, { assemblyId, actor: actor() }))
       .rejects.toMatchObject({ code: 'concession_org_unregistered', statusCode: 409 });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses an assembly that is not on the active assigned list, without touching ZITADEL', async () => {
+    const { deps, calls, state } = makeDeps();
+    deps.isAssigned = async () => false;
+    await expect(onboardAssembly(deps, { assemblyId, actor: actor() }))
+      .rejects.toMatchObject({ code: 'assembly_not_assigned', statusCode: 409 });
+    expect(calls).toHaveLength(0);
+    expect(state.registry.size).toBe(0);
+  });
+
+  it('refuses an assembly with no CROIP assembly id', async () => {
+    const { deps, calls, state } = makeDeps();
+    state.assembly.croipAssemblyId = null;
+    await expect(onboardAssembly(deps, { assemblyId, actor: actor() }))
+      .rejects.toMatchObject({ code: 'assembly_not_assigned', statusCode: 409 });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('fails closed when the assigned list cannot be read', async () => {
+    const { deps, calls } = makeDeps();
+    deps.isAssigned = async () => { throw new Error('connection refused'); };
+    await expect(onboardAssembly(deps, { assemblyId, actor: actor() }))
+      .rejects.toMatchObject({ code: 'assignment_check_unavailable', statusCode: 503 });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses when the project owner is not the registered concession org', async () => {
+    const { deps, calls } = makeDeps();
+    deps.config = { projectId, projectOwnerOrgId: 'zitadel-default-org' };
+    await expect(onboardAssembly(deps, { assemblyId, actor: actor() }))
+      .rejects.toMatchObject({ code: 'project_owner_mismatch', statusCode: 503 });
     expect(calls).toHaveLength(0);
   });
 

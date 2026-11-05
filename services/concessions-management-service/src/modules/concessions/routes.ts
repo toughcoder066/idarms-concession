@@ -19,6 +19,7 @@ import {
 } from '../provisioning/assembly-onboarding';
 import { getAccessibleAssemblies, invalidateAccessDirectory } from '../access-directory/service';
 import { writeDeniedRequestAudit } from '../audit/security';
+import { assignedAssemblyChecker } from '../provisioning/assigned-assemblies';
 import {
   agentAssignmentSchema,
   approvalDecisionSchema,
@@ -291,6 +292,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         prisma: app.prisma,
         zitadel: app.zitadelProvisioning,
         config: { projectId: config.zitadelProjectId, projectOwnerOrgId: config.zitadelProjectOwnerOrgId },
+        isAssigned: assignedAssemblyChecker({ baseUrl: config.croipIntegrationUrl, headers: request.headers }),
         audit: (entry) => app.prisma.$transaction((tx) => writeAudit(tx, entry)),
         invalidateAccessDirectory,
       }, {

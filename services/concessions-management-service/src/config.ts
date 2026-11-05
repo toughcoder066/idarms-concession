@@ -17,8 +17,12 @@ const envSchema = z.object({
   ZITADEL_PROVISIONING_KEY_PATH: z.string().optional(),
   ZITADEL_PROVISIONING_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   ZITADEL_PROJECT_ID: z.string().regex(/^\d+$/, 'ZITADEL_PROJECT_ID must be the numeric ZITADEL project id').optional(),
-  // The ZITADEL org that owns the iDARMS project: identity infrastructure, never a tenant.
+  // The ZITADEL org that owns the iDARMS project: the iDARMS Concession org (ADR-0003).
   ZITADEL_PROJECT_OWNER_ORG_ID: z.string().regex(/^\d+$/, 'ZITADEL_PROJECT_OWNER_ORG_ID must be a numeric ZITADEL org id').optional(),
+  // ZITADEL's own default org: identity infrastructure, never registered in iDARMS.
+  ZITADEL_DEFAULT_ORG_ID: z.string().regex(/^\d+$/, 'ZITADEL_DEFAULT_ORG_ID must be a numeric ZITADEL org id').optional(),
+  // croip-integration-service, which owns the assigned-assembly list.
+  CROIP_INTEGRATION_URL: z.string().url().default('http://localhost:3090'),
   PORTAL_URL: z.string().url().default('http://localhost:3000'),
   PLATFORM_ADMIN_USER_ID: z.string().optional(),
   ACCESS_DIRECTORY_CACHE_TTL_MS: z.coerce.number().int().positive().default(15_000),
@@ -82,6 +86,8 @@ export const config = {
   zitadelProvisioningTimeoutMs: env.ZITADEL_PROVISIONING_TIMEOUT_MS,
   zitadelProjectId: env.ZITADEL_PROJECT_ID,
   zitadelProjectOwnerOrgId: env.ZITADEL_PROJECT_OWNER_ORG_ID,
+  zitadelDefaultOrgId: env.ZITADEL_DEFAULT_ORG_ID,
+  croipIntegrationUrl: env.CROIP_INTEGRATION_URL,
   portalUrl: env.PORTAL_URL,
   platformAdminUserId: env.PLATFORM_ADMIN_USER_ID,
   accessDirectoryCacheTtlMs: env.ACCESS_DIRECTORY_CACHE_TTL_MS,

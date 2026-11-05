@@ -4,7 +4,7 @@ import { registerConcessionOrg, type RegisterConcessionOrgInput } from './regist
 
 const CONCESSION = '11111111-1111-1111-1111-111111111111';
 const OTHER_CONCESSION = '22222222-2222-4222-8222-222222222222';
-const INFRA_ORG = '395945616116613123';
+const DEFAULT_ORG = '395945616116613123';
 const CONCESSION_ORG = '400000000000000001';
 const ASSEMBLY_ORG = '396262817453309955';
 
@@ -42,7 +42,8 @@ function input(overrides: Partial<RegisterConcessionOrgInput> = {}): RegisterCon
   return {
     orgId: CONCESSION_ORG,
     concessionId: CONCESSION,
-    infrastructureOrgId: INFRA_ORG,
+    defaultOrgId: DEFAULT_ORG,
+    actualDefaultOrgId: DEFAULT_ORG,
     actorId: 'operator-1',
     requestId: 'request-1',
     apply: true,
@@ -84,6 +85,14 @@ describe('registering the concession org', () => {
   });
 });
 
+describe('checking ZITADEL\'s default org', () => {
+  it('proceeds outside production when ZITADEL could not be read', async () => {
+    const { prisma } = fakePrisma([assemblyRow]);
+    const result = await registerConcessionOrg(prisma, input({ actualDefaultOrgId: undefined }));
+    expect(result).toMatchObject({ action: 'create', applied: true });
+  });
+});
+
 describe('refusals write nothing', () => {
   async function refused(rows: Row[], overrides: Partial<RegisterConcessionOrgInput>, code: string, concessions?: string[]) {
     const { prisma, registry, audits } = fakePrisma(rows, concessions);
@@ -93,8 +102,14 @@ describe('refusals write nothing', () => {
     expect(audits).toHaveLength(0);
   }
 
-  it('refuses ZITADEL\'s infrastructure (default) org', () => refused([], { orgId: INFRA_ORG }, 'infrastructure_org'));
-  it('refuses when the infrastructure org is unknown', () => refused([], { infrastructureOrgId: '' }, 'infrastructure_org_unknown'));
+  it('refuses ZITADEL\'s default org', () => refused([], { orgId: DEFAULT_ORG }, 'default_org'));
+  it('refuses when the default org is not configured', () => refused([], { defaultOrgId: '' }, 'default_org_unknown'));
+  it('refuses when the configured default org is not ZITADEL\'s actual one', () => refused(
+    [], { defaultOrgId: '395945616116610000' }, 'default_org_mismatch',
+  ));
+  it('refuses in production when ZITADEL\'s default org could not be read', () => refused(
+    [], { actualDefaultOrgId: undefined, requireVerifiedDefaultOrg: true }, 'default_org_unverified',
+  ));
   it('refuses a malformed org id', () => refused([], { orgId: 'org-1' }, 'invalid_org_id'));
   it('refuses a malformed concession id', () => refused([], { concessionId: 'conc-1' }, 'invalid_concession_id'));
   it('refuses an unknown concession', () => refused([], { concessionId: OTHER_CONCESSION }, 'concession_not_found'));
