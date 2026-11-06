@@ -31,9 +31,9 @@ export async function recordPreviewEntry(
   actor: PreviewAuditActor,
   persona: string,
 ): Promise<{ persona: PreviewPersonaKey; label: string; recorded: true }> {
-  if (actor.actorRole !== 'CONCESSION_SUPER_ADMIN' && actor.actorRole !== 'PLATFORM_ADMIN') {
+  if (actor.actorRole !== 'CONCESSION_SUPER_ADMIN') {
     throw new PreviewAuditError(
-      'Preview mode is limited to Concession Super Admins and Platform Admins.',
+      'Preview mode is limited to Concession Super Admins.',
       'forbidden',
       403,
     );

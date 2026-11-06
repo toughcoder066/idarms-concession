@@ -264,11 +264,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     schema: { params: byIdParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const actorRole = resolveOnboardingActorRole(request.auth, {
-      platformAdminUserId: config.platformAdminUserId,
-    });
+    const actorRole = resolveOnboardingActorRole(request.auth);
     if (!actorRole) {
-      const message = 'Only a Concession Super Admin or Platform Admin can onboard an assembly.';
+      const message = 'Only a Concession Super Admin can onboard an assembly.';
       await writeDeniedRequestAudit(app.prisma, request, {
         code: 'forbidden',
         statusCode: 403,
@@ -291,8 +289,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     // A super admin acts concession-wide only from the CONCESSION-scoped home
     // org (the registry sets scopeLevel), with the grant held in that org.
     const atConcessionLevel = request.auth.scopeLevel === 'CONCESSION';
-    const concessionAuthorized = actorRole === 'PLATFORM_ADMIN'
-      || (atConcessionLevel && (request.auth.roleGrants ?? []).some(
+    const concessionAuthorized = (atConcessionLevel && (request.auth.roleGrants ?? []).some(
         (grant) => grant.role === 'CONCESSION_SUPER_ADMIN' && grant.orgId === request.auth.homeOrgId,
       ))
       || (atConcessionLevel && (request.auth.roleGrants?.length ?? 0) === 0

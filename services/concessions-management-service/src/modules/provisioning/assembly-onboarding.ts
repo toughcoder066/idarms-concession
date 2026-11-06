@@ -1,5 +1,5 @@
 import type { PrismaClient } from '../../../generated/prisma';
-import { canManageRole, canManageUserWithRoles, PLATFORM_ADMIN } from '../../lib/roles';
+import { canManageRole, canManageUserWithRoles } from '../../lib/roles';
 import type { AuditInput } from '../concessions/audit';
 import { concessionOrgId } from '../orgs/context';
 import {
@@ -40,7 +40,7 @@ export interface OnboardingActor {
   actorEmail?: string;
   requestId: string;
   expectedConcessionId?: string;
-  /** A Platform Admin, or a Concession Super Admin whose home org is the CONCESSION-scoped org. */
+  /** A Concession Super Admin whose home org is the CONCESSION-scoped org. */
   concessionAuthorized?: boolean;
 }
 
@@ -87,13 +87,12 @@ export class OnboardingError extends Error {
   }
 }
 
+// Only a Concession Super Admin onboards. The Platform Super Admin is an
+// operator outside iDARMS with no project role and no bypass (ADR-0003).
 export function resolveOnboardingActorRole(
-  auth: { subject: string; roles: readonly string[] },
-  config: { platformAdminUserId?: string },
+  auth: { roles: readonly string[] },
 ): string | null {
   if (auth.roles.includes('CONCESSION_SUPER_ADMIN')) return 'CONCESSION_SUPER_ADMIN';
-  if (auth.roles.includes(PLATFORM_ADMIN)) return PLATFORM_ADMIN;
-  if (config.platformAdminUserId && auth.subject === config.platformAdminUserId) return PLATFORM_ADMIN;
   return null;
 }
 

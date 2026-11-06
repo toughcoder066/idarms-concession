@@ -70,7 +70,8 @@ describe('iDARMS role model', () => {
   });
 
   it('enforces the provisioning ceiling', () => {
-    expect(allowedRolesToManage('PLATFORM_ADMIN')).toEqual(keys);
+    // No role, and no PLATFORM_ADMIN pseudo-role, may grant every role (ADR-0003).
+    expect(allowedRolesToManage('PLATFORM_ADMIN')).toEqual([]);
     expect(allowedRolesToManage('CONCESSION_SUPER_ADMIN')).toEqual([
       'ASSEMBLY_ADMIN',
       'FIELD_OPS_MANAGER',

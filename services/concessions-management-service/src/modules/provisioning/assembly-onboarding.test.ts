@@ -574,14 +574,11 @@ describe('onboardAssembly', () => {
     expect(state.registry.size).toBe(1);
   });
 
-  it('resolves only CONCESSION_SUPER_ADMIN, PLATFORM_ADMIN, and the configured platform admin identity', () => {
-    expect(resolveOnboardingActorRole({ subject: 'u1', roles: ['CONCESSION_SUPER_ADMIN'] }, {}))
+  it('resolves only CONCESSION_SUPER_ADMIN; no platform-admin role or identity bypass', () => {
+    expect(resolveOnboardingActorRole({ roles: ['CONCESSION_SUPER_ADMIN'] }))
       .toBe('CONCESSION_SUPER_ADMIN');
-    expect(resolveOnboardingActorRole({ subject: 'u1', roles: ['PLATFORM_ADMIN'] }, {}))
-      .toBe('PLATFORM_ADMIN');
-    expect(resolveOnboardingActorRole({ subject: 'platform-user', roles: [] }, { platformAdminUserId: 'platform-user' }))
-      .toBe('PLATFORM_ADMIN');
-    expect(resolveOnboardingActorRole({ subject: 'u1', roles: ['ASSEMBLY_ADMIN'] }, {}))
-      .toBeNull();
+    expect(resolveOnboardingActorRole({ roles: ['PLATFORM_ADMIN'] })).toBeNull();
+    expect(resolveOnboardingActorRole({ roles: [] })).toBeNull();
+    expect(resolveOnboardingActorRole({ roles: ['ASSEMBLY_ADMIN'] })).toBeNull();
   });
 });

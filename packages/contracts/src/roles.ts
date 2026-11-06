@@ -88,8 +88,6 @@ export interface RoleDefinition {
   type: 'human' | 'machine';
 }
 
-export const PLATFORM_ADMIN = 'PLATFORM_ADMIN';
-
 export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
   {
     key: 'CONCESSION_SUPER_ADMIN',
@@ -273,7 +271,6 @@ export const ROLE_CAPABILITIES: Record<ProjectRole, readonly Capability[]> = {
 };
 
 const MANAGEABLE_ROLES: Record<string, readonly ProjectRole[]> = {
-  [PLATFORM_ADMIN]: PROJECT_ROLE_KEYS,
   CONCESSION_SUPER_ADMIN: [
     'ASSEMBLY_ADMIN',
     'FIELD_OPS_MANAGER',

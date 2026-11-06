@@ -11,7 +11,7 @@ iDARMS microservice. Owned database: `concession_mgmt_db` (HTTP port `3100`).
 - `GET /v1/assemblies` — list assemblies with onboarding state (`assembly:read` / `concession:read`)
 - `GET /v1/assemblies/:id` — assembly profile and readiness inputs (`assembly:read` / `concession:read`)
 - `POST /v1/assemblies` — onboard an assembly (`concession:manage`)
-- `POST /v1/assemblies/:id/onboard` — idempotent local ZITADEL org provisioning (`CONCESSION_SUPER_ADMIN` / `PLATFORM_ADMIN`)
+- `POST /v1/assemblies/:id/onboard` — idempotent local ZITADEL org provisioning (`CONCESSION_SUPER_ADMIN` only)
 - `GET /v1/access-directory/assemblies` — live super-admin grant query with a 15s cache (`concession:read` / `directory:read`)
 - `GET /v1/assemblies/:assemblyId/staff` — assembly staff directory
 - `POST /v1/assemblies/:assemblyId/staff/invite` — invite one staff member
@@ -221,7 +221,7 @@ those sentences. Older onboarding rows are backfilled with `metadata.actorRole` 
 migration `20261023120000_audit_activity_ledger`, which also adds actor/action indexes.
 
 `POST /v1/preview/audit` records the one-time `preview.entered` audit row when a Super
-Admin or Platform Admin enters the static preview experience. It validates the generic
+Admin enters the static preview experience. It validates the generic
 persona and writes only an audit row; it does not create a user, grant, org, or token.
 The preview screens themselves are frontend-only and make no backend reads.
 

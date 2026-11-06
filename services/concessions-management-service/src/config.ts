@@ -24,7 +24,6 @@ const envSchema = z.object({
   // croip-integration-service, which owns the assigned-assembly list.
   CROIP_INTEGRATION_URL: z.string().url().default('http://localhost:3090'),
   PORTAL_URL: z.string().url().default('http://localhost:3000'),
-  PLATFORM_ADMIN_USER_ID: z.string().optional(),
   ACCESS_DIRECTORY_CACHE_TTL_MS: z.coerce.number().int().positive().default(15_000),
   RABBITMQ_URL: z.string().default('amqp://idarms:idarms@127.0.0.1:5672'),
   RABBITMQ_EXCHANGE: z.string().default('idarms.events'),
@@ -94,7 +93,6 @@ export const config = {
   zitadelDefaultOrgId: env.ZITADEL_DEFAULT_ORG_ID,
   croipIntegrationUrl: env.CROIP_INTEGRATION_URL,
   portalUrl: env.PORTAL_URL,
-  platformAdminUserId: env.PLATFORM_ADMIN_USER_ID,
   accessDirectoryCacheTtlMs: env.ACCESS_DIRECTORY_CACHE_TTL_MS,
   rabbitmqUrl: env.RABBITMQ_URL,
   rabbitmqExchange: env.RABBITMQ_EXCHANGE,

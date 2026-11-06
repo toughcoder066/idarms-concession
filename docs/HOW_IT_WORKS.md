@@ -154,7 +154,7 @@ Planned improvement: split staff management into a second robot with the smaller
 
 - `croip-m2m` lost its role when the old project was deleted. This changes nothing today: the portal's local "call CROIP" path already stops with a configuration error, because neither `CROIP_ZITADEL_PROJECT_ID` nor `CROIP_OAUTH_SCOPE` is set in `apps/idarms-portal/.env.local`. Against real CROIP, CROIP gives us its own project id. These calls are being rebuilt behind the CROIP adapter anyway.
 - Line up the assigned-assembly list with the assemblies' CROIP ids (section 6).
-- Remove the old "platform admin onboards" path, which the assignment check now blocks anyway.
+- ~~Remove the old "platform admin onboards" path.~~ Done 5 Nov 2026. Only a Concession Super Admin, signed in from the concession org, can onboard an assembly or open the preview utility. There is no `PLATFORM_ADMIN` role any more. The setting that let one named user act as platform admin (`PLATFORM_ADMIN_USER_ID`) is gone too, and so is that pseudo-role's power to grant every role, `CONCESSION_SUPER_ADMIN` and `CROIP_M2M` included. People who run the platform work in the ZITADEL console and the operator commands, not inside iDARMS. Older audit rows that say "Platform Admin" still display as they were.
 - Split the provisioner robot (section 7).
 - ~~The org-registry lookup between services is unauthenticated.~~ Fixed 5 Nov 2026 (section 4).
 

@@ -63,6 +63,7 @@ export function auditActionLabel(action: string): string {
 }
 
 export function auditActorKind(actorRole: string | null | undefined): AuditActorKind {
+  // PLATFORM_ADMIN is no longer granted; kept so older audit rows still display.
   if (actorRole === 'CONCESSION_SUPER_ADMIN' || actorRole === 'PLATFORM_ADMIN') {
     return 'SUPER_ADMIN';
   }

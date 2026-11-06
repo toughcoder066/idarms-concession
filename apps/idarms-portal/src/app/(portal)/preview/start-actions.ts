@@ -19,10 +19,10 @@ export async function startPreviewAction(persona: string): Promise<PreviewAction
   if (!session) {
     return { ok: false, message: 'Your signed-in session could not be read. Sign in again and retry.' };
   }
-  if (!session.roles.includes('CONCESSION_SUPER_ADMIN') && !session.roles.includes('PLATFORM_ADMIN')) {
+  if (!session.roles.includes('CONCESSION_SUPER_ADMIN')) {
     return {
       ok: false,
-      message: 'Preview mode is limited to Concession Super Admins and Platform Admins.',
+      message: 'Preview mode is limited to Concession Super Admins.',
     };
   }
   if (!session.accessToken) {

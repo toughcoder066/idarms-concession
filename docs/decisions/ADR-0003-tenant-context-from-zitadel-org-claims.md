@@ -88,6 +88,7 @@ The code followed the second design, but guessed an Assembly Admin's home organi
 ## Not settled here
 
 - **Settled by decision 10 (5 Nov 2026):** the registry lookup was unauthenticated (`GET /v1/org-context/:orgId`, no token, 5-minute cache including "not found"; finding T5).
+- **Settled 5 Nov 2026:** the `PLATFORM_ADMIN` bypass is removed. It was a pseudo-role and a `PLATFORM_ADMIN_USER_ID` subject match in assembly onboarding and preview, and it could grant every project role. Onboarding and preview now accept only `CONCESSION_SUPER_ADMIN`, which matches the Platform Super Admin row above (no project role, no bypass). `auditActorKind` and the portal's audit table still recognise the value so historical rows display.
 - **Not yet:** signed registry answers or mutual TLS between services, and copying the registry into each service's own database. Decision 10 relies on TLS for the transport in production.
 - **Settled by decision 7:** the resolver no longer reads `assembly.concessions[0]`; it uses the registry only.
 - **Confirmed 3 Nov 2026:** with the `urn:zitadel:iam:user:resourceowner` scope, the local ZITADEL v4.16.0 instance puts the resource-owner claim in the access token (sign-ins as an assembly admin resolved their assembly from it).

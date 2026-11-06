@@ -30,6 +30,7 @@ type BatchRow = BulkImportPreviewRow | BulkImportCommitRow;
 
 function actorBadge(role: string | null): { kind: string; label: string } {
   const kind = auditActorKind(role);
+  // PLATFORM_ADMIN only appears on older audit rows.
   const label = role === 'PLATFORM_ADMIN'
     ? 'Platform Admin'
     : role && role !== 'UNKNOWN'

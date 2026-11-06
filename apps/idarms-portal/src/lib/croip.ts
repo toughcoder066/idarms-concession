@@ -14,17 +14,25 @@ export interface RegisterRatepayerInput {
   longitude: number;
 }
 
+/**
+ * What the form sends. CROIP `POST /v1/properties` @ 9be15da also needs
+ * `staffRef`, which the server action adds from the session. There is no
+ * code, name or assembly: CROIP assigns the code, only the owning ratepayer
+ * names a property, and CROIP derives the assembly from the polygon.
+ */
 export interface RegisterPropertyInput {
-  code: string;
   accountNumber?: string;
-  propertyName?: string;
-  propertyClass?: string;
-  buildingStatus?: string;
-  propertyStatus?: string;
-  propertyUse?: string;
-  tenureType?: string;
-  structureType?: string;
+  propertyClass: string;
+  buildingStatus: string;
+  propertyStatus: string;
+  propertyUse: string;
+  tenureType: string;
+  structureType: string;
+  numberOfFloors?: number;
+  ghanaPostGps?: string;
   polygonGeoJson: string;
+  /** Generated once when the form opens and resent on every retry. */
+  idempotencyKey: string;
 }
 
 export interface CroipResult {
@@ -34,9 +42,9 @@ export interface CroipResult {
   message?: string;
 }
 
-const optionalPropertyFields = [
-  'accountNumber',
-  'propertyName',
+// CROIP's service refuses a concession registration unless all six are set.
+// They are free text there (no code list yet, O8) and stored as VarChar(50).
+export const requiredPropertyFields = [
   'propertyClass',
   'buildingStatus',
   'propertyStatus',
@@ -107,15 +115,21 @@ export async function registerRatepayer(input: RegisterRatepayerInput): Promise<
   return croipPost(appConfig.croipRatepayerApiUrl, '/v1/ratepayers', body);
 }
 
-export async function registerProperty(input: RegisterPropertyInput): Promise<CroipResult> {
+function isShortText(value: unknown, max: number): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= max;
+}
+
+/** `staffRef` is the signed-in staff member's iDARMS user id, never a form value. */
+export async function registerProperty(input: RegisterPropertyInput, staffRef: string): Promise<CroipResult> {
   if (
     !input ||
-    typeof input.code !== 'string' ||
+    !isShortText(staffRef, 100) ||
+    !isShortText(input.idempotencyKey, 200) ||
     typeof input.polygonGeoJson !== 'string' ||
-    optionalPropertyFields.some((field) => {
-      const value = input[field];
-      return value !== undefined && typeof value !== 'string';
-    })
+    requiredPropertyFields.some((field) => !isShortText(input[field], 50)) ||
+    (input.accountNumber !== undefined && !isShortText(input.accountNumber, 50)) ||
+    (input.ghanaPostGps !== undefined && !isShortText(input.ghanaPostGps, 50)) ||
+    (input.numberOfFloors !== undefined && (!Number.isInteger(input.numberOfFloors) || input.numberOfFloors < 1))
   ) {
     return { ok: false, status: 400, body: 'Invalid property registration details', message: 'Invalid property registration details' };
   }
@@ -128,10 +142,6 @@ export async function registerProperty(input: RegisterPropertyInput): Promise<Cr
   }
 
   if (
-    input.code.trim().length < 3 ||
-    input.code.trim().length > 50 ||
-    (input.accountNumber !== undefined && input.accountNumber.length > 50) ||
-    (input.propertyName !== undefined && input.propertyName.length > 150) ||
     !boundary ||
     typeof boundary !== 'object' ||
     Array.isArray(boundary) ||
@@ -143,18 +153,21 @@ export async function registerProperty(input: RegisterPropertyInput): Promise<Cr
     return { ok: false, status: 400, body: 'Invalid property registration details', message: 'Invalid property registration details' };
   }
 
+  // CROIP hashes this body (minus idempotencyKey) to detect key reuse, so build
+  // it in a fixed order from the same input on every retry.
   const body = {
-    code: input.code.trim(),
+    propertyClass: input.propertyClass.trim(),
+    buildingStatus: input.buildingStatus.trim(),
+    propertyStatus: input.propertyStatus.trim(),
+    propertyUse: input.propertyUse.trim(),
+    tenureType: input.tenureType.trim(),
+    structureType: input.structureType.trim(),
     ...(input.accountNumber ? { accountNumber: input.accountNumber.trim() } : {}),
-    ...(input.propertyName ? { propertyName: input.propertyName.trim() } : {}),
-    ...(input.propertyClass ? { propertyClass: input.propertyClass } : {}),
-    ...(input.buildingStatus ? { buildingStatus: input.buildingStatus } : {}),
-    ...(input.propertyStatus ? { propertyStatus: input.propertyStatus } : {}),
-    ...(input.propertyUse ? { propertyUse: input.propertyUse } : {}),
-    ...(input.tenureType ? { tenureType: input.tenureType } : {}),
-    ...(input.structureType ? { structureType: input.structureType } : {}),
-    registrationSource: 'CONCESSION',
+    ...(input.numberOfFloors !== undefined ? { numberOfFloors: input.numberOfFloors } : {}),
+    ...(input.ghanaPostGps ? { ghanaPostGps: input.ghanaPostGps.trim() } : {}),
     polygonGeoJson: boundary,
+    staffRef: staffRef.trim(),
+    idempotencyKey: input.idempotencyKey.trim(),
   };
   return croipPost(appConfig.croipPropertyApiUrl, '/v1/properties', body);
 }

@@ -6,17 +6,28 @@ import { useRef, useState } from 'react';
 import { submitProperty } from './actions';
 
 const emptyForm = {
-  code: '',
   accountNumber: '',
-  propertyName: '',
   propertyClass: '',
   buildingStatus: '',
   propertyStatus: '',
   propertyUse: '',
   tenureType: '',
   structureType: '',
+  numberOfFloors: '',
+  ghanaPostGps: '',
   polygonGeoJson: '',
 };
+
+// CROIP requires all six but publishes no code list yet (O8). The examples
+// are the values in CROIP's own Postman collection.
+const classificationFields = [
+  { field: 'propertyClass', label: 'Property class', example: 'COMMERCIAL_CLASS_1' },
+  { field: 'propertyUse', label: 'Property use', example: 'COMMERCIAL' },
+  { field: 'tenureType', label: 'Tenure type', example: 'FREEHOLD' },
+  { field: 'buildingStatus', label: 'Building status', example: 'COMPLETED' },
+  { field: 'propertyStatus', label: 'Property status', example: 'UNASSESSED' },
+  { field: 'structureType', label: 'Structure type', example: 'CONCRETE' },
+] as const;
 
 const steps = ['Property details', 'Boundary', 'Review'];
 
@@ -54,6 +65,9 @@ function isValidPolygon(value: string): boolean {
 
 export default function NewPropertyPage() {
   const [form, setForm] = useState(emptyForm);
+  // One key per captured property, reused on every retry so CROIP creates it
+  // once. A new key is made only after CROIP accepts it.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [step, setStep] = useState(0);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -83,19 +97,22 @@ export default function NewPropertyPage() {
       const res = await submitProperty({
         ...form,
         accountNumber: form.accountNumber || undefined,
-        propertyName: form.propertyName || undefined,
-        propertyClass: form.propertyClass || undefined,
-        buildingStatus: form.buildingStatus || undefined,
-        propertyStatus: form.propertyStatus || undefined,
-        propertyUse: form.propertyUse || undefined,
-        tenureType: form.tenureType || undefined,
-        structureType: form.structureType || undefined,
+        numberOfFloors: form.numberOfFloors ? Number(form.numberOfFloors) : undefined,
+        ghanaPostGps: form.ghanaPostGps || undefined,
+        idempotencyKey,
       });
-      setResult(
-        res.ok
-          ? { ok: true, message: 'CROIP accepted the registration. It will appear in the property directory after the next sync.' }
-          : { ok: false, message: res.message ?? `CROIP write failed (${res.status ?? 'network error'}).` },
-      );
+      if (res.ok) {
+        const code = res.property ? ` as ${res.property.code}` : '';
+        const placement = res.assemblyMismatch
+          ? ` Note: CROIP placed it in assembly ${res.property?.assemblyId}, not your workspace assembly.`
+          : '';
+        setResult({ ok: true, message: `CROIP registered the property${code}. It will appear in the property directory after the next sync.${placement}` });
+        setForm(emptyForm);
+        setIdempotencyKey(crypto.randomUUID());
+        setStep(0);
+      } else {
+        setResult({ ok: false, message: res.message ?? `CROIP write failed (${res.status ?? 'network error'}).` });
+      }
     } catch {
       setResult({ ok: false, message: 'Unable to submit the registration. Check the portal configuration and try again.' });
     } finally {
@@ -140,36 +157,23 @@ export default function NewPropertyPage() {
               <div className="wizard-panel">
                 <div className="wizard-heading">
                   <span className="wizard-icon"><Building2 size={18} aria-hidden="true" /></span>
-                  <div><h2>Property details</h2><p>Give this property a unique identifier and describe its use.</p></div>
+                  <div><h2>Property details</h2><p>Classify the property. CROIP assigns its code and places it in an assembly from the boundary.</p></div>
                 </div>
                 <div className="field-grid">
-                  <label className="field">Property code <span className="field-required">Required</span>
-                    <input value={form.code} onChange={(event) => update('code', event.target.value)} minLength={3} maxLength={50} placeholder="e.g. PROP-00482" required />
-                    <small>Use the unique code recognized by CROIP.</small>
-                  </label>
+                  {classificationFields.map(({ field, label, example }) => (
+                    <label key={field} className="field">{label} <span className="field-required">Required</span>
+                      <input value={form[field]} onChange={(event) => update(field, event.target.value)} maxLength={50} placeholder={`e.g. ${example}`} required />
+                    </label>
+                  ))}
                   <label className="field">Account number <span className="field-optional">Optional</span>
                     <input value={form.accountNumber} onChange={(event) => update('accountNumber', event.target.value)} maxLength={50} placeholder="Billing account number" />
+                    <small>Must be unique across CROIP.</small>
                   </label>
-                  <label className="field">Property name <span className="field-optional">Optional</span>
-                    <input value={form.propertyName} onChange={(event) => update('propertyName', event.target.value)} maxLength={150} placeholder="Name used locally" />
+                  <label className="field">Number of floors <span className="field-optional">Optional</span>
+                    <input type="number" min={1} step={1} value={form.numberOfFloors} onChange={(event) => update('numberOfFloors', event.target.value)} placeholder="e.g. 2" />
                   </label>
-                  <label className="field">Property class <span className="field-optional">Optional</span>
-                    <input value={form.propertyClass} onChange={(event) => update('propertyClass', event.target.value)} placeholder="e.g. Residential" />
-                  </label>
-                  <label className="field">Property use <span className="field-optional">Optional</span>
-                    <input value={form.propertyUse} onChange={(event) => update('propertyUse', event.target.value)} placeholder="e.g. Commercial" />
-                  </label>
-                  <label className="field">Tenure type <span className="field-optional">Optional</span>
-                    <input value={form.tenureType} onChange={(event) => update('tenureType', event.target.value)} placeholder="e.g. Leasehold" />
-                  </label>
-                  <label className="field">Building status <span className="field-optional">Optional</span>
-                    <input value={form.buildingStatus} onChange={(event) => update('buildingStatus', event.target.value)} placeholder="e.g. Completed" />
-                  </label>
-                  <label className="field">Property status <span className="field-optional">Optional</span>
-                    <input value={form.propertyStatus} onChange={(event) => update('propertyStatus', event.target.value)} placeholder="Current status" />
-                  </label>
-                  <label className="field field-wide">Structure type <span className="field-optional">Optional</span>
-                    <input value={form.structureType} onChange={(event) => update('structureType', event.target.value)} placeholder="e.g. Detached house" />
+                  <label className="field field-wide">Ghana Post GPS <span className="field-optional">Optional</span>
+                    <input value={form.ghanaPostGps} onChange={(event) => update('ghanaPostGps', event.target.value)} maxLength={50} placeholder="e.g. GA-123-4567" />
                   </label>
                 </div>
               </div>
@@ -210,12 +214,11 @@ export default function NewPropertyPage() {
                   <div className="review-section">
                     <div className="review-section-heading"><strong>Property details</strong><button type="button" className="text-button" onClick={() => setStep(0)}>Edit</button></div>
                     <dl className="review-grid">
-                      <div><dt>Property code</dt><dd>{form.code}</dd></div>
+                      {classificationFields.map(({ field, label }) => (
+                        <div key={field}><dt>{label}</dt><dd>{form[field]}</dd></div>
+                      ))}
                       <div><dt>Account number</dt><dd>{form.accountNumber || 'Not provided'}</dd></div>
-                      <div><dt>Property name</dt><dd>{form.propertyName || 'Not provided'}</dd></div>
-                      <div><dt>Property class</dt><dd>{form.propertyClass || 'Not provided'}</dd></div>
-                      <div><dt>Property use</dt><dd>{form.propertyUse || 'Not provided'}</dd></div>
-                      <div><dt>Tenure / structure</dt><dd>{[form.tenureType, form.structureType].filter(Boolean).join(' · ') || 'Not provided'}</dd></div>
+                      <div><dt>Floors / Ghana Post GPS</dt><dd>{[form.numberOfFloors, form.ghanaPostGps].filter(Boolean).join(' · ') || 'Not provided'}</dd></div>
                     </dl>
                   </div>
                   <div className="review-section">

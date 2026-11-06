@@ -7,7 +7,6 @@ import {
   Calculator,
   ChevronDown,
   CreditCard,
-  Eye,
   FileSignature,
   FolderOpen,
   GitCompareArrows,
@@ -190,12 +189,6 @@ export function PortalShell({
         { href: '/concession/access-directory', label: 'Access directory', icon: ShieldCheck },
         { href: '/concession/audit-ledger', label: 'Audit ledger', icon: ScrollText },
       ],
-    });
-  }
-  if (access.roles.includes('PLATFORM_ADMIN')) {
-    personaGroups.push({
-      title: 'Platform tools',
-      items: [{ href: '/preview', label: 'Preview experience', icon: Eye }],
     });
   }
   const navigationGroups = [

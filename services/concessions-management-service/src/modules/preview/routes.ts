@@ -47,14 +47,12 @@ function sendError(
 
 export async function registerPreviewRoutes(app: FastifyInstance): Promise<void> {
   app.post('/v1/preview/audit', {
-    preHandler: requireAny(['concession:audit:read'], ['CONCESSION_SUPER_ADMIN', 'PLATFORM_ADMIN']),
+    preHandler: requireAny(['concession:audit:read'], ['CONCESSION_SUPER_ADMIN']),
   }, async (request, reply) => {
     const body = parseOrReply(previewAuditSchema, request.body ?? {}, reply);
     if (!body) return;
 
-    const actorRole = request.auth.roles.includes('CONCESSION_SUPER_ADMIN')
-      ? 'CONCESSION_SUPER_ADMIN'
-      : 'PLATFORM_ADMIN';
+    const actorRole = 'CONCESSION_SUPER_ADMIN';
     try {
       const data = await recordPreviewEntry(app.prisma, {
         actorId: request.auth.subject,

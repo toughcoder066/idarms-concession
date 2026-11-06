@@ -112,7 +112,7 @@ export default async function AccessDirectoryPage() {
           <p>Assemblies where your ZITADEL identity currently holds a live CONCESSION_SUPER_ADMIN grant.</p>
         </div>
         <div className="staff-toolbar-actions">
-          {(access.roles.includes('CONCESSION_SUPER_ADMIN') || access.roles.includes('PLATFORM_ADMIN')) && (
+          {access.roles.includes('CONCESSION_SUPER_ADMIN') && (
             <PreviewExperienceButton />
           )}
           {entries.length > 0 && <BulkImportLauncher assemblyOptions={assemblyOptions} label="Bulk import" />}

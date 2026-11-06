@@ -267,8 +267,8 @@ each `.env` file and where the secrets are.
 ### Assembly onboarding (local)
 
 The concessions service owns a rollback-capable provisioning saga at
-`POST /v1/assemblies/:id/onboard`, restricted to `CONCESSION_SUPER_ADMIN` or
-`PLATFORM_ADMIN`. It creates the assembly's ZITADEL organization, grants the iDARMS
+`POST /v1/assemblies/:id/onboard`, restricted to `CONCESSION_SUPER_ADMIN` (there is no
+platform-admin bypass). It creates the assembly's ZITADEL organization, grants the iDARMS
 project (including `CONCESSION_SUPER_ADMIN` so external super-admin grants are valid),
 grants every existing super admin in the new org, optionally invites the first
 `ASSEMBLY_ADMIN`, writes `zitadel_org_contexts`, and invalidates the Access Directory
@@ -360,11 +360,11 @@ The two staff screens are live at:
 
 ### Preview experience (simulation only)
 
-The **Preview experience** utility lets a Concession Super Admin or Platform Admin view
+The **Preview experience** utility lets a Concession Super Admin view
 a generic persona's assembly workspace without impersonating a real user:
 
 - Entry points: the **Preview experience** button on **Access Directory**, and
-  `/preview` for Platform Admins (also available to Super Admins).
+  `/preview`.
 - Personas: Assembly Admin, Field Ops Manager, Finance Officer, Secretary, Cashier,
   Field Agent, Assembly Viewer.
 - `/preview/:persona` renders entirely from

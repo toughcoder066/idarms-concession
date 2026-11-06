@@ -5,8 +5,7 @@ import { getConcessionAccess } from '@/lib/access';
 
 export default async function PreviewUtilityPage() {
   const access = await getConcessionAccess();
-  const allowed = access.roles.includes('CONCESSION_SUPER_ADMIN')
-    || access.roles.includes('PLATFORM_ADMIN');
+  const allowed = access.roles.includes('CONCESSION_SUPER_ADMIN');
 
   if (!allowed) {
     return (
@@ -14,7 +13,7 @@ export default async function PreviewUtilityPage() {
         <div className="staff-access-panel">
           <span className="staff-access-icon"><ShieldAlert size={24} aria-hidden="true" /></span>
           <h1>Preview experience is not available</h1>
-          <p>This utility is limited to Concession Super Admins and Platform Admins.</p>
+          <p>This utility is limited to Concession Super Admins.</p>
           <Link href="/dashboard" className="button button-secondary" prefetch={false}>
             <ArrowLeft size={14} aria-hidden="true" /> Back to dashboard
           </Link>

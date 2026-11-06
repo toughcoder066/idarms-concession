@@ -5,6 +5,8 @@ const state = vi.hoisted(() => ({
   session: null as Session | null,
   assembly: null as { croipAssemblyId?: string | null } | null,
   croipCalls: [] as unknown[],
+  staffRefs: [] as unknown[],
+  propertyResponse: { ok: true, status: 201, body: undefined as unknown } as { ok: boolean; status: number; body?: unknown; message?: string },
 }));
 
 vi.mock('@/auth', () => ({ auth: async () => state.session }));
@@ -14,9 +16,10 @@ vi.mock('@/lib/croip', () => ({
     state.croipCalls.push(input);
     return { ok: true, status: 201 };
   },
-  registerProperty: async (input: unknown) => {
+  registerProperty: async (input: unknown, staffRef: unknown) => {
     state.croipCalls.push(input);
-    return { ok: true, status: 201 };
+    state.staffRefs.push(staffRef);
+    return state.propertyResponse;
   },
 }));
 
@@ -53,7 +56,9 @@ const ratepayer = (assemblyId: string) => ({
 
 beforeEach(() => {
   state.croipCalls = [];
+  state.staffRefs = [];
   state.assembly = { croipAssemblyId: CROIP_ASSEMBLY };
+  state.propertyResponse = { ok: true, status: 201, body: { id: 'prop-1', code: 'PROP-2026-AAAA-BBBB', assemblyId: CROIP_ASSEMBLY } };
 });
 
 describe('ratepayer registration checks the user before CROIP (T2)', () => {
@@ -96,12 +101,56 @@ describe('ratepayer registration checks the user before CROIP (T2)', () => {
 });
 
 describe('property registration checks the user before CROIP (T2)', () => {
-  const property = { code: 'PRP-001', polygonGeoJson: '{"type":"Polygon","coordinates":[]}' };
+  const property = {
+    propertyClass: 'COMMERCIAL_CLASS_1',
+    buildingStatus: 'COMPLETED',
+    propertyStatus: 'UNASSESSED',
+    propertyUse: 'COMMERCIAL',
+    tenureType: 'FREEHOLD',
+    structureType: 'CONCRETE',
+    polygonGeoJson: '{"type":"Polygon","coordinates":[]}',
+    idempotencyKey: 'key-1',
+  };
 
-  it('allows a role with property:create', async () => {
+  it('allows a role with property:create and returns CROIP’s record', async () => {
     state.session = session(['SECRETARY']);
-    expect(await submitProperty(property)).toMatchObject({ ok: true });
+    expect(await submitProperty(property)).toMatchObject({
+      ok: true,
+      property: { id: 'prop-1', code: 'PROP-2026-AAAA-BBBB', assemblyId: CROIP_ASSEMBLY },
+      assemblyMismatch: false,
+    });
     expect(state.croipCalls).toHaveLength(1);
+  });
+
+  it('sends the signed-in user’s iDARMS id as staffRef, ignoring any staffRef in the form', async () => {
+    state.session = session(['SECRETARY']);
+    await submitProperty({ ...property, staffRef: 'forged' } as typeof property);
+    expect(state.staffRefs).toEqual(['user-1']);
+  });
+
+  it('flags a property CROIP placed in another of our assemblies', async () => {
+    state.session = session(['SECRETARY']);
+    state.propertyResponse = { ok: true, status: 201, body: { id: 'prop-2', code: 'PROP-2026-CCCC-DDDD', assemblyId: OTHER_CROIP_ASSEMBLY } };
+    expect(await submitProperty(property)).toMatchObject({ ok: true, assemblyMismatch: true });
+  });
+
+  it('passes CROIP’s refusal through', async () => {
+    state.session = session(['SECRETARY']);
+    state.propertyResponse = { ok: false, status: 403, message: 'Concession is not authorized to register properties outside of its assigned MMDA.' };
+    expect(await submitProperty(property)).toMatchObject({ ok: false, status: 403, message: expect.stringContaining('assigned MMDA') });
+  });
+
+  it('refuses when the assembly has no CROIP id recorded', async () => {
+    state.session = session(['SECRETARY']);
+    state.assembly = { croipAssemblyId: null };
+    expect(await submitProperty(property)).toMatchObject({ ok: false, status: 409 });
+    expect(state.croipCalls).toHaveLength(0);
+  });
+
+  it('refuses a session with no staff identity', async () => {
+    state.session = session(['SECRETARY'], { userId: '' });
+    expect(await submitProperty(property)).toMatchObject({ ok: false, status: 401 });
+    expect(state.croipCalls).toHaveLength(0);
   });
 
   it('refuses a role without property:create and calls nothing', async () => {
